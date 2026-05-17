@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "src-tauri",
+    "ckp_core"
+]
+resolver = "2"
