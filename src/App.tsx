@@ -96,7 +96,7 @@ const App: React.FC = () => {
       // ── 加载中文字体支持 (SimHei) ──
       setExportProgress({ visible: true, percent: 10, text: "正在加载中文字体引擎..." });
       try {
-        const fontRes = await fetch("/fonts/SimHei.ttf");
+        const fontRes = await fetch("/fonts/SimHei_subset.ttf");
         const fontBlob = await fontRes.blob();
         const fontBase64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
