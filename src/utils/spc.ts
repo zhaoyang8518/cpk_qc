@@ -7,6 +7,7 @@ export interface BinData {
   label: string;
   count: number;
   pcbasnList: string[]; // 落在该分箱内的单板条码列表
+  pcbaItems: { asn: string; val: number }[]; // 落在该分箱内的单板条码与具体数值对
 }
 
 export interface SpcCalculationResult {
@@ -162,6 +163,7 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[]):
       label,
       count: 0,
       pcbasnList: [],
+      pcbaItems: [],
     });
     categories.push(label);
   }
@@ -173,6 +175,7 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[]):
       if (val >= bin.binMin && val < bin.binMax) {
         bin.count++;
         bin.pcbasnList.push(asn);
+        bin.pcbaItems.push({ asn, val });
         break;
       }
     }
