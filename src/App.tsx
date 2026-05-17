@@ -98,10 +98,24 @@ const App: React.FC = () => {
       const contentW = pageWidth - margin * 2;
 
       setExportProgress({ visible: true, percent: 10, text: t("exportFont", locale) });
-      await new Promise((r) => setTimeout(r, 10));
+      try {
+        const fontRes = await fetch("/fonts/SimHei_subset.ttf");
+        const fontBlob = await fontRes.blob();
+        const fontBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).split(",")[1];
+            resolve(base64);
+          };
+          reader.readAsDataURL(fontBlob);
+        });
 
-      pdf.addFont("public/fonts/SimHei.ttf", "SimHei", "normal");
-      pdf.setFont("SimHei");
+        pdf.addFileToVFS("SimHei.ttf", fontBase64);
+        pdf.addFont("SimHei.ttf", "SimHei", "normal");
+        pdf.setFont("SimHei");
+      } catch (fontErr) {
+        console.warn("Failed to load SimHei font, falling back to default jsPDF font", fontErr);
+      }
 
       let y = margin + 12;
       pdf.setFontSize(24);
