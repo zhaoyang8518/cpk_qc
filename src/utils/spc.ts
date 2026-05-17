@@ -1,4 +1,5 @@
 import { IndicatorSummary } from "../types";
+import { t, Locale } from "../i18n";
 
 export interface BinData {
   binMin: number;
@@ -32,7 +33,7 @@ export interface SpcCalculationResult {
 /**
  * 严格遵循六西格玛 (Six Sigma) 标准的 SPC 统计算法与分箱引擎
  */
-export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[]): SpcCalculationResult {
+export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], locale: Locale = "en"): SpcCalculationResult {
   const values = indicator.values || [];
   const N = values.length;
 
@@ -78,7 +79,7 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[]):
   }
 
   // 3. 过程能力判定与警报机制 (Cp / Cpk 评估)
-  let status = "数据不足";
+  let status = t("statusInsufficient", locale);
   let statusColor = "#64748b";
   let actionTrigger: string | null = null;
   let cpAlert = false;
@@ -89,22 +90,22 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[]):
 
   if (cpk !== null) {
     if (cpk < 1.0) {
-      status = "不合格 (< 3 Sigma)";
+      status = t("statusFail", locale);
       statusColor = "#ef4444"; // 红色
       if (cp !== null && cp >= 1.0) {
-        actionTrigger = "【均值偏移修正】：机器需重新校准/对中，调整均值移向规格中心。";
+        actionTrigger = t("actionMeanOffset", locale);
       } else {
-        actionTrigger = "【减少变异修正】：工艺不稳定，需检查原材料、设备磨损或强化培训。";
+        actionTrigger = t("actionVariation", locale);
       }
     } else if (cpk >= 1.0 && cpk < 1.33) {
-      status = "勉强合格 (3~4 Sigma)";
+      status = t("statusPassable", locale);
       statusColor = "#f59e0b"; // 琥珀黄
-      actionTrigger = "【密切监控】：过程能力处于边缘状态，需注意工艺参数漂移。";
+      actionTrigger = t("actionMonitor", locale);
     } else if (cpk >= 1.33 && cpk < 2.0) {
-      status = "良好 (4~6 Sigma)";
+      status = t("statusGood", locale);
       statusColor = "#10b981"; // 翡翠绿
     } else if (cpk >= 2.0) {
-      status = "世界级水平 (≥ 6 Sigma)";
+      status = t("statusWorldClass", locale);
       statusColor = "#06b6d4"; // 赛博青
     }
   }

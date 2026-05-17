@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from "react";
 import { Search, BarChart2, ListFilter } from "lucide-react";
 import { IndicatorSummary } from "../types";
 import { CpkStatus } from "../App";
-import { t, Locale } from "../i18n";
+import { t, useLocale } from "../i18n";
 
 interface PcbaListProps {
   indicators: IndicatorSummary[];
@@ -14,7 +14,6 @@ interface PcbaListProps {
   enabledStatuses: Set<CpkStatus>;
   statusCounts: Record<CpkStatus, number>;
   onToggleStatus: (status: CpkStatus) => void;
-  locale: Locale;
 }
 
 const ITEM_HEIGHT = 44; // 固定行高
@@ -40,8 +39,8 @@ const PcbaList: React.FC<PcbaListProps> = ({
   enabledStatuses,
   statusCounts,
   onToggleStatus,
-  locale,
 }) => {
+  const { locale } = useLocale();
   const [scrollTop, setScrollTop] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
 

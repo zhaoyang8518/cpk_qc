@@ -1,4 +1,22 @@
-export type Locale = 'en' | 'zh';
+import { createContext, useContext } from "react";
+
+export type Locale = "en" | "zh";
+
+export interface LocaleContextType {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+}
+
+export const LocaleContext = createContext<LocaleContextType>({
+  locale: "en",
+  setLocale: () => {},
+});
+
+export const LocaleProvider = LocaleContext.Provider;
+
+export function useLocale(): LocaleContextType {
+  return useContext(LocaleContext);
+}
 
 export const translations = {
   en: {
@@ -123,6 +141,27 @@ export const translations = {
     diagActionDispersion: "Check for mechanical wear, fixture looseness, environmental fluctuations, or raw material batch instability.",
     diagStatusComplex: "Process exhibits both excessive variation and severe mean shift.",
     diagActionComplex: "Immediate overhaul required. Step 1: tighten fixtures/inspect materials to reduce variation (improve Cp). Step 2: recalibrate center position (improve Cpk).",
+
+    // spc.ts 统计算法判定与动作建议
+    statusInsufficient: "Insufficient Data",
+    statusFail: "Fail (< 3 Sigma)",
+    statusPassable: "Passable (3~4 Sigma)",
+    statusGood: "Good (4~6 Sigma)",
+    statusWorldClass: "World Class (≥ 6 Sigma)",
+    actionMeanOffset: "[Mean Offset Correction]: Recalibrate machine zero-point to shift mean toward spec center.",
+    actionVariation: "[Reduce Variation]: Process unstable. Inspect raw materials, equipment wear, or enhance operator training.",
+    actionMonitor: "[Close Monitoring]: Process capability is marginal. Monitor closely for parameter drift.",
+    spcStatusTitle: "SPC Status",
+
+    // CpkChart Tooltip
+    binCenter: "Bin Center",
+    actualCount: "Actual Freq",
+    normalFit: "Normal Fit",
+    pcbaListTitle: "PCBA List",
+    measuredVal: "Measured Value",
+    pcbaLoc: "PCBA Loc",
+    actualFreqSeries: "Actual Frequency",
+    normalCurveSeries: "Normal Fit Curve",
   },
   zh: {
     // Header
@@ -246,6 +285,27 @@ export const translations = {
     diagActionDispersion: "请全面排查轴承磨损、夹具松动、现场温湿度波动或物料批次不稳定性。",
     diagStatusComplex: "制程既存在严重的散布过大（标准差大），又伴随大幅度的均值偏移。",
     diagActionComplex: "过程处于极度不稳定状态，需立即停机整改！第一步：锁紧夹具/排查物料降低变异（提升 Cp）；第二步：重新校准中心位置（提升 Cpk）。",
+
+    // spc.ts 统计算法判定与动作建议
+    statusInsufficient: "数据不足",
+    statusFail: "不合格 (< 3 Sigma)",
+    statusPassable: "勉强合格 (3~4 Sigma)",
+    statusGood: "良好 (4~6 Sigma)",
+    statusWorldClass: "世界级水平 (≥ 6 Sigma)",
+    actionMeanOffset: "【均值偏移修正】：机器需重新校准/对中，调整均值移向规格中心。",
+    actionVariation: "【减少变异修正】：工艺不稳定，需检查原材料、设备磨损或强化培训。",
+    actionMonitor: "【密切监控】：过程能力处于边缘状态，需注意工艺参数漂移。",
+    spcStatusTitle: "SPC 判定状态",
+
+    // CpkChart Tooltip
+    binCenter: "组距中心",
+    actualCount: "实际频数",
+    normalFit: "正态拟合",
+    pcbaListTitle: "单板列表",
+    measuredVal: "测量值",
+    pcbaLoc: "单板所在",
+    actualFreqSeries: "实际频数",
+    normalCurveSeries: "正态拟合曲线",
   }
 };
 

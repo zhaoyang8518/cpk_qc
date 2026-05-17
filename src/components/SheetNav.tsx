@@ -1,16 +1,16 @@
 import React, { useRef } from "react";
 import { SheetData } from "../types";
 import { FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
-import { t, Locale } from "../i18n";
+import { t, useLocale } from "../i18n";
 
 interface SheetNavProps {
   sheets: SheetData[];
   activeSheetIdx: number;
   onSheetChange: (idx: number) => void;
-  locale: Locale;
 }
 
-const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChange, locale }) => {
+const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChange }) => {
+  const { locale } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollHorizontally = (direction: "left" | "right") => {

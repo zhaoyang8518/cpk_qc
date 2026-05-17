@@ -18,14 +18,18 @@ function getAllText(dir) {
   return text;
 }
 
-// 提取中文字符及常用字符
+// 提取组件源码及 i18n 字典中的所有文本字符
 const srcText = getAllText(path.resolve("./src"));
-const extraChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;':\",./<>?~` 均值标准差单板世界级良好勉强不合格质量控制分析报告源文件工作表导出成功失败初始化排版生成提取异常专项基本信息执行摘要精益六西格玛潜在精密度实际制程能力短期公差保护机制缺陷率接近零满足主流处于边缘极易超差超出规格界限存在大量次品风险停机整改快速索引快速明细暂无数据请先导入";
+const i18nText = fs.existsSync(path.resolve("./src/i18n.ts")) 
+  ? fs.readFileSync(path.resolve("./src/i18n.ts"), "utf-8") 
+  : "";
 
-const allChars = srcText + extraChars;
+// 保留 ASCII 基础字符表与源码所有字符，杜绝脱节
+const baseAscii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;':\",./<>?~` ";
+const allChars = srcText + i18nText + baseAscii;
 const uniqueChars = Array.from(new Set(allChars.split(""))).sort().join("");
 
-console.log(`[Fontmin] Extracted ${uniqueChars.length} unique characters for subsetting.`);
+console.log(`[Fontmin] Extracted ${uniqueChars.length} unique characters (including i18n.ts & src text).`);
 
 const fontmin = new Fontmin()
   .src(fs.existsSync("public/fonts/SimHei.ttf") ? "public/fonts/SimHei.ttf" : "public/fonts/SimHei_subset.ttf")

@@ -1,6 +1,6 @@
 import React from "react";
 import { Settings, X, Palette, Activity } from "lucide-react";
-import { t, Locale } from "../i18n";
+import { t, useLocale, Locale } from "../i18n";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,8 +9,6 @@ interface SettingsModalProps {
   onChangeTheme: (theme: string) => void;
   lineWidth: number;
   onChangeLineWidth: (width: number) => void;
-  locale: Locale;
-  onChangeLocale: (locale: Locale) => void;
 }
 
 const THEMES = [
@@ -28,9 +26,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeTheme,
   lineWidth,
   onChangeLineWidth,
-  locale,
-  onChangeLocale,
 }) => {
+  const { locale, setLocale } = useLocale();
   if (!isOpen) return null;
 
   return (
@@ -65,7 +62,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               ].map((lang) => (
                 <button
                   key={lang.value}
-                  onClick={() => onChangeLocale(lang.value)}
+                  onClick={() => setLocale(lang.value)}
                   className={`flex items-center justify-center space-x-2 p-2.5 rounded-xl border text-xs font-bold transition-all ${
                     locale === lang.value
                       ? "border-blue-500 bg-blue-600/20 text-blue-300 shadow-lg shadow-blue-500/10 scale-105"

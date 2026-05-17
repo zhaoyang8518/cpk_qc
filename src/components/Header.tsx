@@ -1,6 +1,6 @@
 import React from "react";
 import { FileSpreadsheet, Settings, Download, LayoutGrid, Loader2 } from "lucide-react";
-import { t, Locale } from "../i18n";
+import { t, useLocale } from "../i18n";
 
 interface HeaderProps {
   fileName: string;
@@ -10,7 +10,6 @@ interface HeaderProps {
   onGridChange: (cols: number) => void;
   onExport: () => void;
   onOpenSettings: () => void;
-  locale: Locale;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -21,8 +20,8 @@ const Header: React.FC<HeaderProps> = ({
   onGridChange,
   onExport,
   onOpenSettings,
-  locale,
 }) => {
+  const { locale } = useLocale();
   const gridOptions = [
     { cols: 1, label: t("singleCol", locale), title: t("colTitle1", locale) },
     { cols: 2, label: t("doubleCol", locale), title: t("colTitle2", locale) },

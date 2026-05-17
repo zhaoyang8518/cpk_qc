@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
 import { IndicatorSummary } from "../types";
 import { calculateSpc } from "../utils/spc";
+import { t, useLocale } from "../i18n";
 
 interface CpkChartProps {
   indicator: IndicatorSummary;
@@ -18,9 +19,10 @@ const CpkChart: React.FC<CpkChartProps> = ({
   chartTheme = "#5470c6",
   lineWidth = 2.5,
 }) => {
+  const { locale } = useLocale();
   const spcRes = useMemo(() => {
-    return calculateSpc(indicator, pcbasnList);
-  }, [indicator, pcbasnList]);
+    return calculateSpc(indicator, pcbasnList, locale);
+  }, [indicator, pcbasnList, locale]);
 
   const option = useMemo(() => {
     const { categories, barData, lineData, usl, lsl, bins, status, statusColor, actionTrigger } = spcRes;
@@ -45,7 +47,7 @@ const CpkChart: React.FC<CpkChartProps> = ({
         label: {
           show: isHighlighted || val > 0,
           position: "top",
-          formatter: isHighlighted ? `{bg|单板所在}\n{c}` : "{c}",
+          formatter: isHighlighted ? `{bg|${t("pcbaLoc", locale)}}\n{c}` : "{c}",
           rich: {
             bg: {
               backgroundColor: "#f59e0b",
@@ -106,13 +108,13 @@ const CpkChart: React.FC<CpkChartProps> = ({
           let html = `<div class="font-mono text-xs flex flex-col h-full select-text overflow-hidden">`;
           
           html += `<div class="font-bold border-b border-slate-700 pb-1.5 mb-1.5 flex justify-between items-center flex-shrink-0">`;
-          html += `<span>组距中心: ${bar?.name || ""}</span>`;
+          html += `<span>${t("binCenter", locale)}: ${bar?.name || ""}</span>`;
           html += `<span style="color: ${statusColor}; font-size: 10px; border: 1px solid ${statusColor}; padding: 0 4px; border-radius: 4px;">${status}</span>`;
           html += `</div>`;
 
           html += `<div class="flex-shrink-0 space-y-1 mb-1.5">`;
-          if (bar) html += `<div>实际频数: <span class="text-blue-400 font-bold">${bar.value}</span> 片</div>`;
-          if (line) html += `<div>正态拟合: <span class="text-rose-400 font-bold">${line.value}</span></div>`;
+          if (bar) html += `<div>${t("actualCount", locale)}: <span class="text-blue-400 font-bold">${bar.value}</span></div>`;
+          if (line) html += `<div>${t("normalFit", locale)}: <span class="text-rose-400 font-bold">${line.value}</span></div>`;
           html += `</div>`;
 
           if (actionTrigger) {
@@ -123,7 +125,7 @@ const CpkChart: React.FC<CpkChartProps> = ({
 
           if (bin?.pcbaItems && bin.pcbaItems.length > 0) {
             html += `<div class="flex-1 overflow-y-auto mt-1.5 pt-1.5 border-t border-slate-700 text-[10px] text-slate-400 pr-1 pointer-events-auto select-text">`;
-            html += `<div class="text-slate-300 font-bold mb-1 flex justify-between items-center px-1 sticky top-0 bg-slate-800/95 py-0.5 border-b border-slate-700/50 backdrop-blur"><span>单板列表 (${bin.pcbaItems.length}):</span><span>测量值</span></div>`;
+            html += `<div class="text-slate-300 font-bold mb-1 flex justify-between items-center px-1 sticky top-0 bg-slate-800/95 py-0.5 border-b border-slate-700/50 backdrop-blur"><span>${t("pcbaListTitle", locale)} (${bin.pcbaItems.length}):</span><span>${t("measuredVal", locale)}</span></div>`;
             bin.pcbaItems.forEach((item) => {
               html += `<div class="flex justify-between items-center py-0.5 border-b border-slate-800/40 hover:bg-slate-700/40 px-1 rounded transition-colors">`;
               html += `<span class="font-mono text-slate-300">${item.asn}</span>`;
@@ -151,14 +153,14 @@ const CpkChart: React.FC<CpkChartProps> = ({
       },
       series: [
         {
-          name: "实际频数",
+          name: t("actualFreqSeries", locale),
           type: "bar",
           barCategoryGap: "2%",
           data: seriesBarData,
           animationDuration: 800,
         },
         {
-          name: "正态拟合曲线",
+          name: t("normalCurveSeries", locale),
           type: "line",
           smooth: true,
           symbol: "none",
@@ -169,7 +171,7 @@ const CpkChart: React.FC<CpkChartProps> = ({
         },
       ],
     };
-  }, [spcRes, selectedAsn, chartTheme, lineWidth]);
+  }, [spcRes, selectedAsn, chartTheme, lineWidth, locale]);
 
   return <ReactECharts option={option} style={{ height: "100%", width: "100%" }} notMerge={true} lazyUpdate={true} />;
 };

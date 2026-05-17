@@ -3,7 +3,7 @@ import { IndicatorSummary } from "../types";
 import { FileSpreadsheet, BarChart2, AlertTriangle, Info, Copy, Check, BookOpen, X } from "lucide-react";
 import CpkChart from "./CpkChart";
 import { calculateSpc } from "../utils/spc";
-import { t, Locale } from "../i18n";
+import { t, useLocale } from "../i18n";
 
 interface ChartGridProps {
   indicators: IndicatorSummary[];
@@ -14,7 +14,6 @@ interface ChartGridProps {
   onSelectIndicator: (idx: number) => void;
   chartTheme?: string;
   lineWidth?: number;
-  locale: Locale;
 }
 
 const ChartGrid: React.FC<ChartGridProps> = ({
@@ -26,8 +25,8 @@ const ChartGrid: React.FC<ChartGridProps> = ({
   onSelectIndicator,
   chartTheme,
   lineWidth,
-  locale,
 }) => {
+  const { locale } = useLocale();
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: "" });
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [activeDiagIdx, setActiveDiagIdx] = useState<number | null>(null);
@@ -97,7 +96,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
       {/* 权威专家诊断报告模态框 (Modal) */}
       {activeDiagIdx !== null && (() => {
         const ind = visibleList[activeDiagIdx].ind;
-        const spcRes = calculateSpc(ind, pcbasnList);
+        const spcRes = calculateSpc(ind, pcbasnList, locale);
         const { cp, cpk, sigmaLevel, status, statusColor } = spcRes;
 
         // 计算规格中心与均值偏移率
@@ -201,7 +200,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                       <div className="text-blue-400 font-bold text-base mt-1">{sigmaLevel !== null ? `${sigmaLevel.toFixed(2)} σ` : "-"}</div>
                     </div>
                     <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 shadow-inner">
-                      <div className="text-slate-500 text-[11px]">SPC Status</div>
+                      <div className="text-slate-500 text-[11px]">{t("spcStatusTitle", locale)}</div>
                       <div className="font-bold text-sm mt-1 truncate py-0.5" style={{ color: statusColor }}>{status}</div>
                     </div>
                   </div>
@@ -276,7 +275,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
 
       {visibleList.map(({ ind, idx }) => {
         // 调用底层的六西格玛诊断数据
-        const spcRes = calculateSpc(ind, pcbasnList);
+        const spcRes = calculateSpc(ind, pcbasnList, locale);
         const { cp, cpk, sigmaLevel, status, statusColor, actionTrigger, cpAlert } = spcRes;
         const isSelected = selectedIndicatorIdx === idx;
 
