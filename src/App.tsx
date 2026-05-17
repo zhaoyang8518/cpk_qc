@@ -13,6 +13,7 @@ import SheetNav from "./components/SheetNav";
 import PcbaList from "./components/PcbaList";
 import ChartGrid from "./components/ChartGrid";
 import SettingsModal from "./components/SettingsModal";
+import { t, Locale } from "./i18n";
 
 export type CpkStatus = "red" | "yellow" | "green" | "cyan";
 
@@ -24,6 +25,7 @@ const getCpkStatus = (cpk: number | null): CpkStatus => {
 };
 
 const App: React.FC = () => {
+  const [locale, setLocale] = useState<Locale>("en");
   const [sheets, setSheets] = useState<SheetData[]>([]);
   const [activeSheetIdx, setActiveSheetIdx] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
@@ -34,6 +36,8 @@ const App: React.FC = () => {
   const [enabledCpkStatuses, setEnabledCpkStatuses] = useState<Set<CpkStatus>>(
     () => new Set(["red", "yellow", "green", "cyan"])
   );
+
+  const displayFileName = fileName === "未导入文件" || fileName === "No file imported" ? t("noFile", locale) : fileName;
 
   // 导出进度条模态框状态
   const [exportProgress, setExportProgress] = useState<{
@@ -58,7 +62,7 @@ const App: React.FC = () => {
       if (selected) {
         setLoading(true);
         const path = (selected as any).path || selected;
-        setFileName(path.split("/").pop() || "已导入文件");
+        setFileName(path.split("/").pop() || t("importedFile", locale));
 
         // 调用 Rust 后端解析引擎
         const res: SheetData[] = await invoke("parse_excel", { path });
@@ -70,31 +74,31 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Excel import failed:", err);
       setLoading(false);
-      alert(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`${t("importFailed", locale)}${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
   // 处理导出分析报告 (仅导出当前工作表报告，包含执行摘要、汇总表、明细表及异常图表)
   const handleExport = async () => {
     if (sheets.length === 0) {
-      alert("暂无分析数据可导出，请先导入 Excel 工作表。");
+      alert(t("noDataExport", locale));
       return;
     }
 
     const sheet = sheets[activeSheetIdx];
     if (!sheet || sheet.indicators.length === 0) {
-      alert("当前工作表无检测项数据可导出。");
+      alert(t("noIndicatorExport", locale));
       return;
     }
 
-    setExportProgress({ visible: true, percent: 5, text: "正在初始化精益六西格玛排版引擎..." });
+    setExportProgress({ visible: true, percent: 5, text: t("exportInit", locale) });
     await new Promise((r) => setTimeout(r, 50));
 
     try {
       const pdf = new jsPDF("p", "mm", "a4");
 
       // ── 加载中文字体支持 (SimHei) ──
-      setExportProgress({ visible: true, percent: 10, text: "正在加载中文字体引擎..." });
+      setExportProgress({ visible: true, percent: 10, text: t("exportFont", locale) });
       try {
         const fontRes = await fetch("/fonts/SimHei_subset.ttf");
         const fontBlob = await fontRes.blob();
@@ -127,26 +131,26 @@ const App: React.FC = () => {
       pdf.rect(0, 0, pageW, 45, "F");
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(22);
-      pdf.text("CPK 质量控制分析报告", pageW / 2, 25, { align: "center" });
+      pdf.text(t("reportMainTitle", locale), pageW / 2, 25, { align: "center" });
       pdf.setFontSize(10);
       pdf.setTextColor(148, 163, 184);
-      pdf.text("ckp_qc v0.1.0  |  Industrial SPC Analysis Engine", pageW / 2, 35, { align: "center" });
+      pdf.text(t("reportSubtitle", locale), pageW / 2, 35, { align: "center" });
 
       let y = 55;
       pdf.setTextColor(30, 41, 59);
       pdf.setFontSize(14);
-      pdf.text("报告基本信息", margin, y);
+      pdf.text(t("reportInfoTitle", locale), margin, y);
       y += 6;
       pdf.setDrawColor(200, 210, 220);
       pdf.line(margin, y, pageW - margin, y);
       y += 6;
 
       const infoRows: [string, string][] = [
-        ["源文件名称", fileName],
-        ["当前工作表", sheet.sheet_name],
-        ["分析生成时间", ts],
-        ["检测项总数", String(sheet.indicators.length)],
-        ["分析样本数 (单板数)", String(sheet.pcbasn_list.length)],
+        [t("infoFileName", locale), displayFileName],
+        [t("infoSheetName", locale), sheet.sheet_name],
+        [t("infoTime", locale), ts],
+        [t("infoIndCount", locale), String(sheet.indicators.length)],
+        [t("infoSampleCount", locale), String(sheet.pcbasn_list.length)],
       ];
       pdf.setFontSize(10);
       for (const [label, value] of infoRows) {
@@ -161,33 +165,33 @@ const App: React.FC = () => {
       y += 6;
       pdf.setFontSize(14);
       pdf.setTextColor(30, 41, 59);
-      pdf.text("1. 执行摘要 (Executive Summary)", margin, y);
+      pdf.text(t("execSummaryTitle", locale), margin, y);
       y += 6;
       pdf.setFontSize(9);
       pdf.setTextColor(71, 85, 105);
-      const summaryText = "本报告由 CPK Quality Controller 自动生成，采用精益六西格玛 (Lean Six Sigma) 质量工程标准与大样本 SPC 统计算法对当前测试数据进行了深度制程能力评估。系统通过动态划定 X 轴缓冲区与单边公差自动保护机制，精确计算每一个检测项的潜在精密度 (Cp)、实际制程能力 (Cpk) 及短期 Sigma 水平 (Z)。以下为当前工作表所有检测项的过程能力等级分布汇总：";
+      const summaryText = t("execSummaryText", locale);
       const splitSummary = pdf.splitTextToSize(summaryText, contentW);
       pdf.text(splitSummary, margin, y);
       y += splitSummary.length * 5 + 8;
 
       // ── 2. 过程能力等级汇总表 (Capability Summary Table) ──
-      setExportProgress({ visible: true, percent: 15, text: "正在排版过程能力等级汇总表..." });
+      setExportProgress({ visible: true, percent: 15, text: t("exportCapSummaryTable", locale) });
       pdf.setFontSize(14);
       pdf.setTextColor(30, 41, 59);
-      pdf.text("2. 过程能力等级汇总表 (Capability Summary)", margin, y);
+      pdf.text(t("capSummaryTitle", locale), margin, y);
       y += 4;
 
       const totalInds = sheet.indicators.length;
       const statusSummaryData = [
-        ["世界级水平", "CPK ≥ 2.00 (≥ 6 Sigma)", String(cpkStatusCounts.cyan), `${((cpkStatusCounts.cyan / totalInds) * 100).toFixed(1)}%`, "工艺极其卓越，缺陷率接近零 (< 3.4 DPMO)"],
-        ["良好", "1.33 ≤ CPK < 2.00 (4~6 Sigma)", String(cpkStatusCounts.green), `${((cpkStatusCounts.green / totalInds) * 100).toFixed(1)}%`, "满足主流工业标准，过程处于稳定受控状态"],
-        ["勉强合格", "1.00 ≤ CPK < 1.33 (3~4 Sigma)", String(cpkStatusCounts.yellow), `${((cpkStatusCounts.yellow / totalInds) * 100).toFixed(1)}%`, "处于公差边缘，参数轻微漂移极易超差，需密切监控"],
-        ["不合格", "CPK < 1.00 (< 3 Sigma)", String(cpkStatusCounts.red), `${((cpkStatusCounts.red / totalInds) * 100).toFixed(1)}%`, "变差超出规格界限，存在大量次品风险，需停机整改"],
+        [t("worldClass", locale), "CPK ≥ 2.00 (≥ 6 Sigma)", String(cpkStatusCounts.cyan), `${((cpkStatusCounts.cyan / totalInds) * 100).toFixed(1)}%`, t("capWorldClassDesc", locale)],
+        [t("good", locale), "1.33 ≤ CPK < 2.00 (4~6 Sigma)", String(cpkStatusCounts.green), `${((cpkStatusCounts.green / totalInds) * 100).toFixed(1)}%`, t("capGoodDesc", locale)],
+        [t("passable", locale), "1.00 ≤ CPK < 1.33 (3~4 Sigma)", String(cpkStatusCounts.yellow), `${((cpkStatusCounts.yellow / totalInds) * 100).toFixed(1)}%`, t("capPassableDesc", locale)],
+        [t("fail", locale), "CPK < 1.00 (< 3 Sigma)", String(cpkStatusCounts.red), `${((cpkStatusCounts.red / totalInds) * 100).toFixed(1)}%`, t("capFailDesc", locale)],
       ];
 
       autoTable(pdf, {
         startY: y,
-        head: [["等级名称", "评估标准", "检测项数量", "数量占比", "六西格玛状态说明"]],
+        head: [[t("capLevelName", locale), t("capCriteria", locale), t("capIndCount", locale), t("capRatio", locale), t("capDesc", locale)]],
         body: statusSummaryData,
         theme: "grid",
         styles: { font: "SimHei" },
@@ -213,16 +217,16 @@ const App: React.FC = () => {
       y = (pdf as any).lastAutoTable.finalY + 12;
 
       // ── 3. 检测项过程能力快速索引明细表 (Indicators Index Table) ──
-      setExportProgress({ visible: true, percent: 25, text: "正在生成检测项快速索引印刷级表格..." });
+      setExportProgress({ visible: true, percent: 25, text: t("exportIndIndexTable", locale) });
       pdf.setFontSize(14);
       pdf.setTextColor(30, 41, 59);
-      pdf.text("3. 检测项过程能力快速索引 (Indicators Index)", margin, y);
+      pdf.text(t("indIndexTitle", locale), margin, y);
       y += 4;
 
       const sorted = [...sheet.indicators].sort((a, b) => (b.cpk ?? -Infinity) - (a.cpk ?? -Infinity));
       const indTableData = sorted.map((ind, idx) => {
         const status = getCpkStatus(ind.cpk);
-        const statusLabel = status === "red" ? "不合格" : status === "yellow" ? "勉强" : status === "green" ? "良好" : "世界级";
+        const statusLabel = status === "red" ? t("fail", locale) : status === "yellow" ? t("passable", locale) : status === "green" ? t("good", locale) : t("worldClass", locale);
         const sigmaLevel = ind.cpk !== null && ind.cpk !== undefined ? (3 * ind.cpk).toFixed(1) + "σ" : "-";
         return [
           String(idx + 1),
@@ -237,7 +241,7 @@ const App: React.FC = () => {
 
       autoTable(pdf, {
         startY: y,
-        head: [["#", "检测项名称", "均值 μ", "标准差 σ", "CPK", "判定", "Sigma 水平"]],
+        head: [["#", t("indName", locale), t("indMean", locale), t("indStdev", locale), t("indCpk", locale), t("indJudgment", locale), t("indSigma", locale)]],
         body: indTableData,
         theme: "striped",
         styles: { font: "SimHei" },
@@ -255,10 +259,10 @@ const App: React.FC = () => {
         willDrawCell: (data) => {
           if (data.section === "body" && data.column.index === 5) {
             const val = data.cell.raw;
-            if (val === "世界级") data.cell.styles.textColor = [6, 182, 212];
-            if (val === "良好") data.cell.styles.textColor = [16, 185, 129];
-            if (val === "勉强") data.cell.styles.textColor = [245, 158, 11];
-            if (val === "不合格") data.cell.styles.textColor = [239, 68, 68];
+            if (val === t("worldClass", locale) || val === "世界级") data.cell.styles.textColor = [6, 182, 212];
+            if (val === t("good", locale) || val === "良好") data.cell.styles.textColor = [16, 185, 129];
+            if (val === t("passable", locale) || val === "勉强") data.cell.styles.textColor = [245, 158, 11];
+            if (val === t("fail", locale) || val === "不合格") data.cell.styles.textColor = [239, 68, 68];
           }
         },
       });
@@ -279,7 +283,7 @@ const App: React.FC = () => {
           setExportProgress({
             visible: true,
             percent,
-            text: `正在提取异常检测项图表 (${i + 1} / ${targetIndicators.length}): ${ind.name.slice(0, 15)}...`,
+            text: `${t("exportExtractChart", locale)} (${i + 1} / ${targetIndicators.length}): ${ind.name.slice(0, 15)}...`,
           });
           await new Promise((r) => setTimeout(r, 5));
 
@@ -342,12 +346,12 @@ const App: React.FC = () => {
 
           pdf.setFontSize(8);
           pdf.setTextColor(148, 163, 184);
-          pdf.text(`${sheet.sheet_name}  |  异常检测项专项分析 (${i + 1} / ${targetIndicators.length})`, pageW / 2, pageH - 6, { align: "center" });
+          pdf.text(`${sheet.sheet_name}  |  ${t("abnormalAnalysisTitle", locale)} (${i + 1} / ${targetIndicators.length})`, pageW / 2, pageH - 6, { align: "center" });
         }
       }
 
       // ── 5. 原生文件保存写入 ──
-      setExportProgress({ visible: true, percent: 92, text: "正在选择导出保存位置..." });
+      setExportProgress({ visible: true, percent: 92, text: t("exportSaveLoc", locale) });
       const outName = `ckp_qc_report_${fileName.replace(/\.[^/.]+$/, "")}_${sheet.sheet_name}.pdf`;
 
       const filePath = await save({
@@ -356,15 +360,15 @@ const App: React.FC = () => {
       });
 
       if (filePath) {
-        setExportProgress({ visible: true, percent: 96, text: "正在将报告二进制流写入本地磁盘..." });
+        setExportProgress({ visible: true, percent: 96, text: t("exportWriteDisk", locale) });
         const pdfBuffer = pdf.output("arraybuffer");
         await writeFile(filePath, new Uint8Array(pdfBuffer));
-        setExportProgress({ visible: true, percent: 100, text: "报告导出成功！" });
+        setExportProgress({ visible: true, percent: 100, text: t("exportSuccess", locale) });
         await new Promise((r) => setTimeout(r, 500));
       }
     } catch (err) {
       console.error("PDF export failed:", err);
-      alert(`导出 PDF 失败: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`${t("exportFailed", locale)}${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setExportProgress({ visible: false, percent: 0, text: "" });
       setLoading(false);
@@ -396,13 +400,14 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen w-screen bg-slate-900 text-slate-100 overflow-hidden font-sans select-none">
       {/* 顶部操作栏 */}
       <Header
-        fileName={fileName}
+        fileName={displayFileName}
         loading={loading}
         gridCols={gridCols}
         onImport={handleImport}
         onGridChange={setGridCols}
         onExport={handleExport}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        locale={locale}
       />
 
       {/* 主体视窗区域 */}
@@ -428,6 +433,7 @@ const App: React.FC = () => {
               return next;
             });
           }}
+          locale={locale}
         />
 
         {/* 右侧统计图表矩阵 */}
@@ -441,6 +447,7 @@ const App: React.FC = () => {
             onSelectIndicator={setSelectedIndicatorIdx}
             chartTheme={chartTheme}
             lineWidth={lineWidth}
+            locale={locale}
           />
         </main>
       </div>
@@ -453,6 +460,7 @@ const App: React.FC = () => {
           setActiveSheetIdx(idx);
           setSelectedIndicatorIdx(null);
         }}
+        locale={locale}
       />
 
       {/* 高级系统设置模态框 */}
@@ -463,6 +471,8 @@ const App: React.FC = () => {
         onChangeTheme={setChartTheme}
         lineWidth={lineWidth}
         onChangeLineWidth={setLineWidth}
+        locale={locale}
+        onChangeLocale={setLocale}
       />
 
       {/* 导出进度条模态弹窗 */}
@@ -474,8 +484,8 @@ const App: React.FC = () => {
                 <FileSpreadsheet className="w-6 h-6 animate-pulse" />
               </div>
               <div>
-                <h3 className="text-slate-200 font-bold text-sm">正在生成六西格玛分析报告</h3>
-                <p className="text-xs text-slate-400">请稍候，系统正在进行高速制程能力排版...</p>
+                <h3 className="text-slate-200 font-bold text-sm">{t("generatingReport", locale)}</h3>
+                <p className="text-xs text-slate-400">{t("generatingReportDesc", locale)}</p>
               </div>
             </div>
             

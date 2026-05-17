@@ -1,14 +1,16 @@
 import React, { useRef } from "react";
 import { SheetData } from "../types";
 import { FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { t, Locale } from "../i18n";
 
 interface SheetNavProps {
   sheets: SheetData[];
   activeSheetIdx: number;
   onSheetChange: (idx: number) => void;
+  locale: Locale;
 }
 
-const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChange }) => {
+const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChange, locale }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scrollHorizontally = (direction: "left" | "right") => {
@@ -61,7 +63,7 @@ const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChan
         ) : (
           <div className="flex items-center space-x-2 text-xs text-slate-500 px-4 italic">
             <FileSpreadsheet className="w-4 h-4 opacity-30" />
-            <span>底部 Sheet 导航栏 (导入数据后自动生成)</span>
+            <span>{t("sheetNavEmpty", locale)}</span>
           </div>
         )}
       </div>

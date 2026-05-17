@@ -1,5 +1,6 @@
 import React from "react";
 import { Settings, X, Palette, Activity } from "lucide-react";
+import { t, Locale } from "../i18n";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface SettingsModalProps {
   onChangeTheme: (theme: string) => void;
   lineWidth: number;
   onChangeLineWidth: (width: number) => void;
+  locale: Locale;
+  onChangeLocale: (locale: Locale) => void;
 }
 
 const THEMES = [
@@ -25,6 +28,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeTheme,
   lineWidth,
   onChangeLineWidth,
+  locale,
+  onChangeLocale,
 }) => {
   if (!isOpen) return null;
 
@@ -35,7 +40,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 bg-slate-800/60 border-b border-slate-700/60">
           <div className="flex items-center space-x-2 text-slate-100">
             <Settings className="w-5 h-5 text-blue-400" />
-            <h2 className="font-bold text-base tracking-wide">高级系统设置</h2>
+            <h2 className="font-bold text-base tracking-wide">{t("modalTitle", locale)}</h2>
           </div>
           <button
             onClick={onClose}
@@ -47,11 +52,37 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-          {/* Section 1: Chart Theme */}
+          {/* Section 0: Language */}
           <div className="space-y-3">
             <div className="flex items-center space-x-2 text-sm font-bold text-slate-300">
+              <span className="text-blue-400 font-bold">🌐</span>
+              <span>{t("language", locale)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              {[
+                { label: t("english", locale), value: "en" as Locale },
+                { label: t("chinese", locale), value: "zh" as Locale },
+              ].map((lang) => (
+                <button
+                  key={lang.value}
+                  onClick={() => onChangeLocale(lang.value)}
+                  className={`flex items-center justify-center space-x-2 p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                    locale === lang.value
+                      ? "border-blue-500 bg-blue-600/20 text-blue-300 shadow-lg shadow-blue-500/10 scale-105"
+                      : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                  }`}
+                >
+                  <span>{lang.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 1: Chart Theme */}
+          <div className="space-y-3 border-t border-slate-800 pt-5">
+            <div className="flex items-center space-x-2 text-sm font-bold text-slate-300">
               <Palette className="w-4 h-4 text-emerald-400" />
-              <span>直方柱颜色主题</span>
+              <span>{t("chartTheme", locale)}</span>
             </div>
             <div className="grid grid-cols-3 gap-3 pt-1">
               {THEMES.map((t) => (
@@ -76,7 +107,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2 text-sm font-bold text-slate-300">
                 <Activity className="w-4 h-4 text-rose-400" />
-                <span>正态拟合曲线宽度</span>
+                <span>{t("lineWidthTitle", locale)}</span>
               </div>
               <span className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded text-blue-400 font-bold border border-slate-700">
                 {lineWidth} px
@@ -92,23 +123,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
             <div className="flex justify-between text-[10px] text-slate-500 font-mono px-1">
-              <span>细 (1px)</span>
-              <span>中 (2.5px)</span>
-              <span>粗 (5px)</span>
+              <span>{t("thin", locale)}</span>
+              <span>{t("medium", locale)}</span>
+              <span>{t("thick", locale)}</span>
             </div>
           </div>
 
           {/* Section 3: SPC Algorithm Info */}
           <div className="space-y-2 border-t border-slate-800 pt-5 text-xs text-slate-400 leading-relaxed">
-            <div className="font-bold text-slate-300 mb-1">直方图分箱引擎说明</div>
+            <div className="font-bold text-slate-300 mb-1">{t("spcEngineTitle", locale)}</div>
             <p>
-              系统内置经典的 <span className="text-blue-400 font-mono">Sturges 规则</span> 动态自适应组距计算：
+              {t("spcEngineDesc1", locale)}
               <code className="bg-slate-800 px-1.5 py-0.5 rounded ml-1 font-mono text-slate-300">
                 K = ⌈1 + 3.322 log₁₀ N⌉
               </code>
             </p>
             <p>
-              正态分布红线基于量级对齐公式进行概率密度缩放，确保在横向分箱柱体坐标系下实现无缝贴合。
+              {t("spcEngineDesc2", locale)}
             </p>
           </div>
         </div>
@@ -119,7 +150,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onClose}
             className="px-5 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-medium rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 border border-blue-500/50"
           >
-            完成设置
+            {t("completeSettings", locale)}
           </button>
         </div>
       </div>

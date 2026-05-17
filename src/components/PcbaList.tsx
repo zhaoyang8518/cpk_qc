@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from "react";
 import { Search, BarChart2, ListFilter } from "lucide-react";
 import { IndicatorSummary } from "../types";
 import { CpkStatus } from "../App";
+import { t, Locale } from "../i18n";
 
 interface PcbaListProps {
   indicators: IndicatorSummary[];
@@ -13,6 +14,7 @@ interface PcbaListProps {
   enabledStatuses: Set<CpkStatus>;
   statusCounts: Record<CpkStatus, number>;
   onToggleStatus: (status: CpkStatus) => void;
+  locale: Locale;
 }
 
 const ITEM_HEIGHT = 44; // 固定行高
@@ -38,6 +40,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
   enabledStatuses,
   statusCounts,
   onToggleStatus,
+  locale,
 }) => {
   const [scrollTop, setScrollTop] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -99,7 +102,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2 text-slate-200">
             <BarChart2 className="w-4 h-4 text-blue-400" />
-            <h2 className="text-sm font-bold tracking-wide">检测项图表列表</h2>
+            <h2 className="text-sm font-bold tracking-wide">{t("indicatorList", locale)}</h2>
           </div>
         </div>
 
@@ -107,7 +110,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
           <Search className="w-4 h-4 text-slate-400 absolute left-3" />
           <input
             type="text"
-            placeholder="搜索检测项"
+            placeholder={t("searchPlaceholder", locale)}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full pl-9 pr-8 py-1.5 bg-slate-900/60 border border-slate-700 rounded-lg text-xs focus:outline-none focus:border-blue-500 transition-colors placeholder:text-slate-500 text-slate-200 shadow-inner"
@@ -127,22 +130,22 @@ const PcbaList: React.FC<PcbaListProps> = ({
             {
               status: "red" as const,
               className: "text-rose-300 border-rose-500/30 bg-rose-500/10",
-              title: "CPK < 1.00 (不合格)",
+              title: `CPK < 1.00 (${t("fail", locale)})`,
             },
             {
               status: "yellow" as const,
               className: "text-amber-300 border-amber-500/30 bg-amber-500/10",
-              title: "1.00 ≤ CPK < 1.33 (勉强)",
+              title: `1.00 ≤ CPK < 1.33 (${t("passable", locale)})`,
             },
             {
               status: "green" as const,
               className: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10",
-              title: "1.33 ≤ CPK < 2.00 (良好)",
+              title: `1.33 ≤ CPK < 2.00 (${t("good", locale)})`,
             },
             {
               status: "cyan" as const,
               className: "text-cyan-300 border-cyan-500/30 bg-cyan-500/10",
-              title: "CPK ≥ 2.00 (世界级)",
+              title: `CPK ≥ 2.00 (${t("worldClass", locale)})`,
             },
           ].map((option) => {
             const isEnabled = enabledStatuses.has(option.status);
@@ -167,9 +170,9 @@ const PcbaList: React.FC<PcbaListProps> = ({
         <div className="flex items-center justify-between mt-3 text-xs text-slate-400 px-1 font-mono">
           <div className="flex items-center space-x-1">
             <ListFilter className="w-3.5 h-3.5" />
-            <span>过滤: {visibleIndicators.length}</span>
+            <span>{t("filterFiltered", locale)}: {visibleIndicators.length}</span>
           </div>
-          <span>总计: {indicators.length}</span>
+          <span>{t("filterTotal", locale)}: {indicators.length}</span>
         </div>
       </div>
 
@@ -216,7 +219,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 p-6 text-center">
             <BarChart2 className="w-8 h-8 opacity-20" />
-            <span className="text-xs">未找到匹配的检测项</span>
+            <span className="text-xs">{t("noMatchingIndicators", locale)}</span>
           </div>
         )}
       </div>

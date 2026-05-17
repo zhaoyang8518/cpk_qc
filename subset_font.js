@@ -28,7 +28,7 @@ const uniqueChars = Array.from(new Set(allChars.split(""))).sort().join("");
 console.log(`[Fontmin] Extracted ${uniqueChars.length} unique characters for subsetting.`);
 
 const fontmin = new Fontmin()
-  .src("public/fonts/SimHei.ttf")
+  .src(fs.existsSync("public/fonts/SimHei.ttf") ? "public/fonts/SimHei.ttf" : "public/fonts/SimHei_subset.ttf")
   .use(Fontmin.glyph({ text: uniqueChars, hinting: false }))
   .dest("public/fonts");
 
