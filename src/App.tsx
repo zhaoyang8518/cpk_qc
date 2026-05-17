@@ -1,8 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { writeFile } from "@tauri-apps/plugin-fs";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as echarts from "echarts";
+import { FileSpreadsheet } from "lucide-react";
 import { SheetData } from "./types";
 import Header from "./components/Header";
 import SheetNav from "./components/SheetNav";
@@ -30,6 +34,13 @@ const App: React.FC = () => {
   const [enabledCpkStatuses, setEnabledCpkStatuses] = useState<Set<CpkStatus>>(
     () => new Set(["red", "yellow", "green", "cyan"])
   );
+
+  // 导出进度条模态框状态
+  const [exportProgress, setExportProgress] = useState<{
+    visible: boolean;
+    percent: number;
+    text: string;
+  }>({ visible: false, percent: 0, text: "" });
 
   // 系统高级设置状态
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -63,7 +74,7 @@ const App: React.FC = () => {
     }
   };
 
-  // 处理导出分析报告 (导出为 PDF 文件)
+  // 处理导出分析报告 (仅导出当前工作表报告，包含执行摘要、汇总表、明细表及异常图表)
   const handleExport = async () => {
     if (sheets.length === 0) {
       alert("暂无分析数据可导出，请先导入 Excel 工作表。");
@@ -76,43 +87,66 @@ const App: React.FC = () => {
       return;
     }
 
-    setLoading(true);
+    setExportProgress({ visible: true, percent: 5, text: "正在初始化精益六西格玛排版引擎..." });
+    await new Promise((r) => setTimeout(r, 50));
 
     try {
       const pdf = new jsPDF("p", "mm", "a4");
+
+      // ── 加载中文字体支持 (SimHei) ──
+      setExportProgress({ visible: true, percent: 10, text: "正在加载中文字体引擎..." });
+      try {
+        const fontRes = await fetch("/fonts/SimHei.ttf");
+        const fontBlob = await fontRes.blob();
+        const fontBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).split(",")[1];
+            resolve(base64);
+          };
+          reader.readAsDataURL(fontBlob);
+        });
+
+        pdf.addFileToVFS("SimHei.ttf", fontBase64);
+        pdf.addFont("SimHei.ttf", "SimHei", "normal");
+        pdf.setFont("SimHei");
+      } catch (fontErr) {
+        console.warn("Failed to load SimHei font, falling back to default jsPDF font", fontErr);
+      }
+
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const margin = 12;
       const contentW = pageW - margin * 2;
 
-      // ── 封面 ──
+      // ── 封面与概览 ──
       const now = new Date();
       const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
       pdf.setFillColor(15, 23, 42);
-      pdf.rect(0, 0, pageW, 50, "F");
+      pdf.rect(0, 0, pageW, 45, "F");
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(22);
-      pdf.text("CPK 质量控制分析报告", pageW / 2, 28, { align: "center" });
+      pdf.text("CPK 质量控制分析报告", pageW / 2, 25, { align: "center" });
       pdf.setFontSize(10);
       pdf.setTextColor(148, 163, 184);
-      pdf.text("ckp_qc v0.1.0  |  Industrial SPC Analysis Engine", pageW / 2, 38, { align: "center" });
+      pdf.text("ckp_qc v0.1.0  |  Industrial SPC Analysis Engine", pageW / 2, 35, { align: "center" });
 
-      let y = 60;
+      let y = 55;
       pdf.setTextColor(30, 41, 59);
       pdf.setFontSize(14);
-      pdf.text("报告概览", margin, y);
-      y += 8;
+      pdf.text("报告基本信息", margin, y);
+      y += 6;
       pdf.setDrawColor(200, 210, 220);
       pdf.line(margin, y, pageW - margin, y);
-      y += 8;
+      y += 6;
 
       const infoRows: [string, string][] = [
-        ["源文件", fileName],
-        ["工作表", sheet.sheet_name],
-        ["导出时间", ts],
+        ["源文件名称", fileName],
+        ["当前工作表", sheet.sheet_name],
+        ["分析生成时间", ts],
         ["检测项总数", String(sheet.indicators.length)],
-        ["单板总数", String(sheet.pcbasn_list.length)],
+        ["分析样本数 (单板数)", String(sheet.pcbasn_list.length)],
       ];
       pdf.setFontSize(10);
       for (const [label, value] of infoRows) {
@@ -120,151 +154,219 @@ const App: React.FC = () => {
         pdf.text(label, margin, y);
         pdf.setTextColor(30, 41, 59);
         pdf.text(value, margin + 40, y);
-        y += 7;
+        y += 6.5;
       }
 
-      // CPK 分布概览
-      y += 5;
-      pdf.setFontSize(12);
+      // ── 1. 报告执行摘要 (Executive Summary) ──
+      y += 6;
+      pdf.setFontSize(14);
       pdf.setTextColor(30, 41, 59);
-      pdf.text("CPK 等级分布", margin, y);
-      y += 7;
-
-      const statusDefs: { label: string; color: readonly [number, number, number]; key: CpkStatus }[] = [
-        { label: "不合格 (< 1.0)", color: [239, 68, 68] as const, key: "red" },
-        { label: "勉强合格 (1.0~1.33)", color: [245, 158, 11] as const, key: "yellow" },
-        { label: "良好 (1.33~2.0)", color: [16, 185, 129] as const, key: "green" },
-        { label: "世界级 (≥ 2.0)", color: [6, 182, 212] as const, key: "cyan" },
-      ];
-      const boxW = (contentW - 12) / 4;
-      for (let i = 0; i < statusDefs.length; i++) {
-        const def = statusDefs[i];
-        const bx = margin + i * (boxW + 4);
-        pdf.setFillColor(...def.color, 0.15);
-        pdf.roundedRect(bx, y, boxW, 16, 2, 2, "F");
-        pdf.setTextColor(...def.color);
-        pdf.setFontSize(16);
-        pdf.text(String(cpkStatusCounts[def.key]), bx + boxW / 2, y + 10, { align: "center" });
-        pdf.setFontSize(7);
-        pdf.text(def.label, bx + boxW / 2, y + 14, { align: "center" });
-      }
-      y += 22;
-
-      // 检测项汇总表
-      pdf.setFontSize(12);
-      pdf.setTextColor(30, 41, 59);
-      pdf.text("检测项快速索引", margin, y);
-      y += 7;
-
-      // 表头
-      const colDefs = [
-        { x: margin, w: 8, label: "#" },
-        { x: margin + 8, w: 62, label: "检测项名称" },
-        { x: margin + 70, w: 22, label: "均值 μ" },
-        { x: margin + 92, w: 22, label: "标准差 σ" },
-        { x: margin + 114, w: 22, label: "CPK" },
-        { x: margin + 136, w: 26, label: "判定" },
-        { x: margin + 162, w: 22, label: "Sigma" },
-      ];
-      pdf.setFillColor(241, 245, 249);
-      pdf.rect(margin, y - 5, contentW, 6, "F");
-      pdf.setFontSize(7);
+      pdf.text("1. 执行摘要 (Executive Summary)", margin, y);
+      y += 6;
+      pdf.setFontSize(9);
       pdf.setTextColor(71, 85, 105);
-      for (const col of colDefs) {
-        pdf.text(col.label, col.x + col.w / 2, y, { align: "center" });
-      }
-      y += 5;
+      const summaryText = "本报告由 CPK Quality Controller 自动生成，采用精益六西格玛 (Lean Six Sigma) 质量工程标准与大样本 SPC 统计算法对当前测试数据进行了深度制程能力评估。系统通过动态划定 X 轴缓冲区与单边公差自动保护机制，精确计算每一个检测项的潜在精密度 (Cp)、实际制程能力 (Cpk) 及短期 Sigma 水平 (Z)。以下为当前工作表所有检测项的过程能力等级分布汇总：";
+      const splitSummary = pdf.splitTextToSize(summaryText, contentW);
+      pdf.text(splitSummary, margin, y);
+      y += splitSummary.length * 5 + 8;
+
+      // ── 2. 过程能力等级汇总表 (Capability Summary Table) ──
+      setExportProgress({ visible: true, percent: 15, text: "正在排版过程能力等级汇总表..." });
+      pdf.setFontSize(14);
+      pdf.setTextColor(30, 41, 59);
+      pdf.text("2. 过程能力等级汇总表 (Capability Summary)", margin, y);
+      y += 4;
+
+      const totalInds = sheet.indicators.length;
+      const statusSummaryData = [
+        ["世界级水平", "CPK ≥ 2.00 (≥ 6 Sigma)", String(cpkStatusCounts.cyan), `${((cpkStatusCounts.cyan / totalInds) * 100).toFixed(1)}%`, "工艺极其卓越，缺陷率接近零 (< 3.4 DPMO)"],
+        ["良好", "1.33 ≤ CPK < 2.00 (4~6 Sigma)", String(cpkStatusCounts.green), `${((cpkStatusCounts.green / totalInds) * 100).toFixed(1)}%`, "满足主流工业标准，过程处于稳定受控状态"],
+        ["勉强合格", "1.00 ≤ CPK < 1.33 (3~4 Sigma)", String(cpkStatusCounts.yellow), `${((cpkStatusCounts.yellow / totalInds) * 100).toFixed(1)}%`, "处于公差边缘，参数轻微漂移极易超差，需密切监控"],
+        ["不合格", "CPK < 1.00 (< 3 Sigma)", String(cpkStatusCounts.red), `${((cpkStatusCounts.red / totalInds) * 100).toFixed(1)}%`, "变差超出规格界限，存在大量次品风险，需停机整改"],
+      ];
+
+      autoTable(pdf, {
+        startY: y,
+        head: [["等级名称", "评估标准", "检测项数量", "数量占比", "六西格玛状态说明"]],
+        body: statusSummaryData,
+        theme: "grid",
+        styles: { font: "SimHei" },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 9, fontStyle: "bold", halign: "center" },
+        bodyStyles: { fontSize: 8, textColor: [50, 60, 70], valign: "middle" },
+        columnStyles: {
+          0: { fontStyle: "bold", halign: "center" },
+          1: { halign: "center" },
+          2: { halign: "center", fontStyle: "bold" },
+          3: { halign: "center", fontStyle: "bold" },
+          4: { halign: "left" },
+        },
+        willDrawCell: (data) => {
+          if (data.section === "body" && data.column.index === 0) {
+            if (data.row.index === 0) data.cell.styles.textColor = [6, 182, 212];
+            if (data.row.index === 1) data.cell.styles.textColor = [16, 185, 129];
+            if (data.row.index === 2) data.cell.styles.textColor = [245, 158, 11];
+            if (data.row.index === 3) data.cell.styles.textColor = [239, 68, 68];
+          }
+        },
+      });
+
+      y = (pdf as any).lastAutoTable.finalY + 12;
+
+      // ── 3. 检测项过程能力快速索引明细表 (Indicators Index Table) ──
+      setExportProgress({ visible: true, percent: 25, text: "正在生成检测项快速索引印刷级表格..." });
+      pdf.setFontSize(14);
+      pdf.setTextColor(30, 41, 59);
+      pdf.text("3. 检测项过程能力快速索引 (Indicators Index)", margin, y);
+      y += 4;
 
       const sorted = [...sheet.indicators].sort((a, b) => (b.cpk ?? -Infinity) - (a.cpk ?? -Infinity));
-      pdf.setFontSize(7);
-      for (let i = 0; i < sorted.length && y < pageH - 20; i++) {
-        const ind = sorted[i];
+      const indTableData = sorted.map((ind, idx) => {
         const status = getCpkStatus(ind.cpk);
         const statusLabel = status === "red" ? "不合格" : status === "yellow" ? "勉强" : status === "green" ? "良好" : "世界级";
-        const statusColor = (status === "red" ? [239, 68, 68] : status === "yellow" ? [245, 158, 11] : status === "green" ? [16, 185, 129] : [6, 182, 212]) as readonly [number, number, number];
-
-        if (i % 2 === 0) {
-          pdf.setFillColor(248, 250, 252);
-          pdf.rect(margin, y - 4, contentW, 5, "F");
-        }
-        pdf.setTextColor(71, 85, 105);
-        pdf.text(String(i + 1), colDefs[0].x + colDefs[0].w / 2, y, { align: "center" });
-        pdf.setTextColor(30, 41, 59);
-        const name = ind.name.length > 24 ? ind.name.slice(0, 23) + "…" : ind.name;
-        pdf.text(name, colDefs[1].x + 1, y);
-        pdf.text(ind.average !== null && ind.average !== undefined ? ind.average.toFixed(2) : "-", colDefs[2].x + colDefs[2].w / 2, y, { align: "center" });
-        pdf.text(ind.stdev !== null && ind.stdev !== undefined ? ind.stdev.toFixed(4) : "-", colDefs[3].x + colDefs[3].w / 2, y, { align: "center" });
-        pdf.setTextColor(...statusColor);
-        pdf.text(ind.cpk !== null && ind.cpk !== undefined ? ind.cpk.toFixed(2) : "-", colDefs[4].x + colDefs[4].w / 2, y, { align: "center" });
-        pdf.text(statusLabel, colDefs[5].x + colDefs[5].w / 2, y, { align: "center" });
-        pdf.setTextColor(71, 85, 105);
         const sigmaLevel = ind.cpk !== null && ind.cpk !== undefined ? (3 * ind.cpk).toFixed(1) + "σ" : "-";
-        pdf.text(sigmaLevel, colDefs[6].x + colDefs[6].w / 2, y, { align: "center" });
-        y += 5;
-      }
+        return [
+          String(idx + 1),
+          ind.name,
+          ind.average !== null && ind.average !== undefined ? ind.average.toFixed(2) : "-",
+          ind.stdev !== null && ind.stdev !== undefined ? ind.stdev.toFixed(4) : "-",
+          ind.cpk !== null && ind.cpk !== undefined ? ind.cpk.toFixed(2) : "-",
+          statusLabel,
+          sigmaLevel,
+        ];
+      });
 
-      // ── 图表页 ──
-      const cardIds = visibleIndicators.map((v) => v.index).sort((a, b) => a - b);
+      autoTable(pdf, {
+        startY: y,
+        head: [["#", "检测项名称", "均值 μ", "标准差 σ", "CPK", "判定", "Sigma 水平"]],
+        body: indTableData,
+        theme: "striped",
+        styles: { font: "SimHei" },
+        headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontSize: 8, fontStyle: "bold", halign: "center" },
+        bodyStyles: { fontSize: 8, textColor: [30, 41, 59], valign: "middle" },
+        columnStyles: {
+          0: { halign: "center", textColor: [100, 115, 130] },
+          1: { halign: "left", fontStyle: "bold" },
+          2: { halign: "center" },
+          3: { halign: "center" },
+          4: { halign: "center", fontStyle: "bold" },
+          5: { halign: "center", fontStyle: "bold" },
+          6: { halign: "center", textColor: [100, 115, 130] },
+        },
+        willDrawCell: (data) => {
+          if (data.section === "body" && data.column.index === 5) {
+            const val = data.cell.raw;
+            if (val === "世界级") data.cell.styles.textColor = [6, 182, 212];
+            if (val === "良好") data.cell.styles.textColor = [16, 185, 129];
+            if (val === "勉强") data.cell.styles.textColor = [245, 158, 11];
+            if (val === "不合格") data.cell.styles.textColor = [239, 68, 68];
+          }
+        },
+      });
 
-      for (let i = 0; i < cardIds.length; i++) {
-        const idx = cardIds[i];
-        const cardEl = document.getElementById(`indicator-card-${idx}`);
-        if (!cardEl) continue;
-
-        // 将卡片滚入视口以确保 ECharts 已完成渲染
-        cardEl.scrollIntoView({ block: "center", behavior: "instant" });
-        await new Promise((r) => setTimeout(r, 200));
-
-        const canvas = await html2canvas(cardEl, {
-          backgroundColor: "#0f172a",
-          scale: 2,
-          useCORS: true,
-          logging: false,
+      // ── 4. 异常检测项图表专项分析 (仅黄色和红色检测项) ──
+      const targetIndicators = sheet.indicators
+        .map((ind, index) => ({ ind, index }))
+        .filter(({ ind }) => {
+          const st = getCpkStatus(ind.cpk);
+          return st === "red" || st === "yellow";
         });
 
-        pdf.addPage();
+      if (targetIndicators.length > 0) {
+        for (let i = 0; i < targetIndicators.length; i++) {
+          const { ind, index: idx } = targetIndicators[i];
 
-        // CSS px → mm (html2canvas 基础 dpi ≈ 96, scale=2 时除以 2 得到 CSS 尺寸)
-        const cssW = canvas.width / 2;
-        const cssH = canvas.height / 2;
-        let imgW = cssW * 25.4 / 96;
-        let imgH = cssH * 25.4 / 96;
+          const percent = Math.round(30 + (i / targetIndicators.length) * 60);
+          setExportProgress({
+            visible: true,
+            percent,
+            text: `正在提取异常检测项图表 (${i + 1} / ${targetIndicators.length}): ${ind.name.slice(0, 15)}...`,
+          });
+          await new Promise((r) => setTimeout(r, 5));
 
-        // 缩放适配页面宽度
-        const maxW = contentW;
-        if (imgW > maxW) {
-          const ratio = maxW / imgW;
-          imgW *= ratio;
-          imgH *= ratio;
+          const cardEl = document.getElementById(`indicator-card-${idx}`);
+          if (!cardEl) continue;
+
+          const chartDom = cardEl.querySelector(".echarts-for-react") || cardEl.querySelector("div[_echarts_instance_]") || cardEl;
+          const chartInstance = echarts.getInstanceByDom(chartDom as HTMLElement);
+
+          let imgData: string | null = null;
+          let imgW = 160;
+          let imgH = 100;
+
+          if (chartInstance) {
+            imgData = chartInstance.getDataURL({
+              type: "png",
+              pixelRatio: 2,
+              backgroundColor: "#0f172a",
+            });
+            const width = chartInstance.getWidth();
+            const height = chartInstance.getHeight();
+            imgW = (width / 2) * (25.4 / 96);
+            imgH = (height / 2) * (25.4 / 96);
+          } else {
+            cardEl.scrollIntoView({ block: "center", behavior: "instant" });
+            await new Promise((r) => setTimeout(r, 100));
+            const canvas = await html2canvas(cardEl as HTMLElement, {
+              backgroundColor: "#0f172a",
+              scale: 2,
+              useCORS: true,
+              logging: false,
+            });
+            imgData = canvas.toDataURL("image/png");
+            imgW = (canvas.width / 2) * (25.4 / 96);
+            imgH = (canvas.height / 2) * (25.4 / 96);
+          }
+
+          if (!imgData) continue;
+
+          pdf.addPage();
+
+          const maxW = contentW;
+          if (imgW > maxW) {
+            const ratio = maxW / imgW;
+            imgW *= ratio;
+            imgH *= ratio;
+          }
+
+          const maxH = pageH - margin * 2 - 10;
+          if (imgH > maxH) {
+            const ratio = maxH / imgH;
+            imgW *= ratio;
+            imgH *= ratio;
+          }
+
+          const imgX = (pageW - imgW) / 2;
+          const imgY = (pageH - imgH) / 2;
+
+          pdf.addImage(imgData, "PNG", imgX, imgY, imgW, imgH);
+
+          pdf.setFontSize(8);
+          pdf.setTextColor(148, 163, 184);
+          pdf.text(`${sheet.sheet_name}  |  异常检测项专项分析 (${i + 1} / ${targetIndicators.length})`, pageW / 2, pageH - 6, { align: "center" });
         }
-
-        // 如果仍然超出页面高度则再次缩放
-        const maxH = pageH - margin * 2;
-        if (imgH > maxH) {
-          const ratio = maxH / imgH;
-          imgW *= ratio;
-          imgH *= ratio;
-        }
-
-        const imgX = (pageW - imgW) / 2;
-        const imgY = (pageH - imgH) / 2;
-
-        const imgData = canvas.toDataURL("image/png");
-        pdf.addImage(imgData, "PNG", imgX, imgY, imgW, imgH);
-
-        // 页脚
-        pdf.setFontSize(8);
-        pdf.setTextColor(148, 163, 184);
-        pdf.text(`${sheet.sheet_name}  |  ${i + 1} / ${cardIds.length}`, pageW / 2, pageH - 6, { align: "center" });
       }
 
-      // 保存
-      const outName = `ckp_qc_report_${fileName.replace(/\.[^/.]+$/, "")}.pdf`;
-      pdf.save(outName);
+      // ── 5. 原生文件保存写入 ──
+      setExportProgress({ visible: true, percent: 92, text: "正在选择导出保存位置..." });
+      const outName = `ckp_qc_report_${fileName.replace(/\.[^/.]+$/, "")}_${sheet.sheet_name}.pdf`;
+
+      const filePath = await save({
+        defaultPath: outName,
+        filters: [{ name: "PDF 文档", extensions: ["pdf"] }],
+      });
+
+      if (filePath) {
+        setExportProgress({ visible: true, percent: 96, text: "正在将报告二进制流写入本地磁盘..." });
+        const pdfBuffer = pdf.output("arraybuffer");
+        await writeFile(filePath, new Uint8Array(pdfBuffer));
+        setExportProgress({ visible: true, percent: 100, text: "报告导出成功！" });
+        await new Promise((r) => setTimeout(r, 500));
+      }
     } catch (err) {
       console.error("PDF export failed:", err);
       alert(`导出 PDF 失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      setExportProgress({ visible: false, percent: 0, text: "" });
       setLoading(false);
     }
   };
@@ -362,6 +464,36 @@ const App: React.FC = () => {
         lineWidth={lineWidth}
         onChangeLineWidth={setLineWidth}
       />
+
+      {/* 导出进度条模态弹窗 */}
+      {exportProgress.visible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm select-none">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 w-96 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-400">
+                <FileSpreadsheet className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-slate-200 font-bold text-sm">正在生成六西格玛分析报告</h3>
+                <p className="text-xs text-slate-400">请稍候，系统正在进行高速制程能力排版...</p>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-slate-400">{exportProgress.text}</span>
+                <span className="text-blue-400 font-bold">{exportProgress.percent}%</span>
+              </div>
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${exportProgress.percent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
