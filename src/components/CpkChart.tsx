@@ -7,35 +7,40 @@ interface CpkChartProps {
   indicator: IndicatorSummary;
   pcbasnList: string[];
   selectedAsn: string | null;
+  chartTheme?: string;
+  lineWidth?: number;
 }
 
-const CpkChart: React.FC<CpkChartProps> = ({ indicator, pcbasnList, selectedAsn }) => {
-  // 核心统计算法计算
+const CpkChart: React.FC<CpkChartProps> = ({
+  indicator,
+  pcbasnList,
+  selectedAsn,
+  chartTheme = "#5470c6",
+  lineWidth = 2.5,
+}) => {
   const spcRes = useMemo(() => {
     return calculateSpc(indicator, pcbasnList);
   }, [indicator, pcbasnList]);
 
-  // 构建 ECharts 配置项
   const option = useMemo(() => {
-    const { categories, barData, lineData, usl, lsl, bins } = spcRes;
+    const { categories, barData, lineData, usl, lsl, bins, status, statusColor, actionTrigger } = spcRes;
 
-    // 查找被选中单板所在的分箱索引
     let highlightBinIdx = -1;
     if (selectedAsn) {
       highlightBinIdx = bins.findIndex((bin) => bin.pcbasnList.includes(selectedAsn));
     }
 
-    // 构建支持高亮的 Bar 数据
     const seriesBarData = barData.map((val, idx) => {
       const isHighlighted = idx === highlightBinIdx;
       return {
         value: val,
         itemStyle: {
-          color: isHighlighted ? "#f59e0b" : "#5470c6", // 高亮黄色，默认蓝色
-          borderColor: isHighlighted ? "#fbbf24" : "#738fdb",
+          color: isHighlighted ? "#f59e0b" : chartTheme,
+          borderColor: isHighlighted ? "#fbbf24" : chartTheme,
           borderWidth: isHighlighted ? 2 : 1,
           shadowBlur: isHighlighted ? 12 : 0,
           shadowColor: "#f59e0b",
+          opacity: isHighlighted ? 1 : 0.85,
         },
         label: {
           show: isHighlighted || val > 0,
@@ -55,7 +60,6 @@ const CpkChart: React.FC<CpkChartProps> = ({ indicator, pcbasnList, selectedAsn 
       };
     });
 
-    // 构建 USL/LSL 辅助线数据
     const markLineData: any[] = [];
     if (usl !== null && usl !== undefined) {
       markLineData.push({
@@ -83,18 +87,29 @@ const CpkChart: React.FC<CpkChartProps> = ({ indicator, pcbasnList, selectedAsn 
       tooltip: {
         trigger: "axis",
         axisPointer: { type: "shadow" },
-        backgroundColor: "rgba(30, 41, 59, 0.9)",
-        borderColor: "rgba(71, 85, 105, 0.5)",
+        backgroundColor: "rgba(30, 41, 59, 0.95)",
+        borderColor: statusColor,
+        borderWidth: 1,
         textStyle: { color: "#f8fafc", fontSize: 12 },
         formatter: (params: any[]) => {
           const bar = params.find((p) => p.seriesType === "bar");
           const line = params.find((p) => p.seriesType === "line");
           const bin = bins[bar?.dataIndex || 0];
 
-          let html = `<div class="font-mono text-xs">`;
-          html += `<div class="font-bold border-b border-slate-700 pb-1 mb-1">分箱中心: ${bar?.name || ""}</div>`;
+          let html = `<div class="font-mono text-xs space-y-1">`;
+          html += `<div class="font-bold border-b border-slate-700 pb-1 flex justify-between items-center">`;
+          html += `<span>组距中心: ${bar?.name || ""}</span>`;
+          html += `<span style="color: ${statusColor}; font-size: 10px; border: 1px solid ${statusColor}; padding: 0 4px; border-radius: 4px;">${status}</span>`;
+          html += `</div>`;
           if (bar) html += `<div>实际频数: <span class="text-blue-400 font-bold">${bar.value}</span> 片</div>`;
           if (line) html += `<div>正态拟合: <span class="text-rose-400 font-bold">${line.value}</span></div>`;
+
+          if (actionTrigger) {
+            html += `<div class="mt-1 pt-1 border-t border-slate-700 text-[10px] text-amber-300 bg-amber-500/10 p-1.5 rounded border border-amber-500/20 whitespace-normal">`;
+            html += `💡 ${actionTrigger}`;
+            html += `</div>`;
+          }
+
           if (bin?.pcbasnList.length > 0) {
             html += `<div class="mt-1 pt-1 border-t border-slate-700 text-[10px] text-slate-400 max-h-20 overflow-y-auto">`;
             html += `单板列表 (${bin.pcbasnList.length}):<br/>` + bin.pcbasnList.slice(0, 5).join("<br/>");
@@ -122,7 +137,7 @@ const CpkChart: React.FC<CpkChartProps> = ({ indicator, pcbasnList, selectedAsn 
         {
           name: "实际频数",
           type: "bar",
-          barCategoryGap: "2%", // 紧密排列，完美还原图1、2质感
+          barCategoryGap: "2%",
           data: seriesBarData,
           animationDuration: 800,
         },
@@ -131,14 +146,14 @@ const CpkChart: React.FC<CpkChartProps> = ({ indicator, pcbasnList, selectedAsn 
           type: "line",
           smooth: true,
           symbol: "none",
-          lineStyle: { color: "#ee6666", width: 2.5, shadowColor: "rgba(238, 102, 102, 0.3)", shadowBlur: 8 },
+          lineStyle: { color: "#ee6666", width: lineWidth, shadowColor: "rgba(238, 102, 102, 0.3)", shadowBlur: 8 },
           data: lineData,
           markLine: markLineData.length > 0 ? { symbol: "none", data: markLineData } : undefined,
           animationDuration: 1000,
         },
       ],
     };
-  }, [spcRes, selectedAsn]);
+  }, [spcRes, selectedAsn, chartTheme, lineWidth]);
 
   return <ReactECharts option={option} style={{ height: "100%", width: "100%" }} notMerge={true} lazyUpdate={true} />;
 };

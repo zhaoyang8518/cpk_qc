@@ -10,6 +10,7 @@ export interface IndicatorSummary {
   usl: number | null;
   lsl: number | null;
   values: number[];
+  value_asns: string[];
 }
 
 export interface SheetData {
