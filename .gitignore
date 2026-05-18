@@ -26,7 +26,5 @@ Thumbs.db
 *.csv
 *.tsv
 
-# Tauri & Local config
-src-tauri/icons/icon.icns
-src-tauri/icons/icon.ico
+# Local config
 *.local
