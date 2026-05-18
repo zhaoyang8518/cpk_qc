@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "src-tauri",
-    "ckp_core"
+    "cpk_core"
 ]
 resolver = "2"

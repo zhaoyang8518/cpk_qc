@@ -1,11 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ckp_core::{parse_excel_file, SheetData};
+use cpk_core::{parse_excel_file, SheetData};
 
 #[tauri::command]
 async fn parse_excel(path: String) -> Result<Vec<SheetData>, String> {
-    // 调用 ckp_core 的高性能异步解析引擎
+    // 调用 cpk_core 的高性能异步解析引擎
     parse_excel_file(&path)
 }
 

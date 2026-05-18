@@ -1,5 +1,5 @@
 [package]
-name = "ckp_qc"
+name = "cpk_qc"
 version = "0.1.0"
 description = "CPK & QC 统计分析软件"
 authors = ["Antigravity"]
@@ -14,7 +14,7 @@ tauri-plugin-dialog = "2.0.0"
 tauri-plugin-fs = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-ckp_core = { path = "../ckp_core" }
+cpk_core = { path = "../cpk_core" }
 
 [features]
 default = [ "custom-protocol" ]

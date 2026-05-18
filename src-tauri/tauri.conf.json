@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/2.0.0/tauri.schema.json",
-  "productName": "ckp_qc",
+  "productName": "cpk_qc",
   "version": "0.1.0",
   "identifier": "com.cpkqc.app.v3",
   "build": {

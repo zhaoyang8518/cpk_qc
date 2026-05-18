@@ -1,5 +1,5 @@
 [package]
-name = "ckp_core"
+name = "cpk_core"
 version = "0.1.0"
 edition = "2021"
 authors = ["Antigravity <antigravity@google.com>"]

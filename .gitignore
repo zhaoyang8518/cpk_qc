@@ -5,7 +5,7 @@ node_modules/
 dist/
 target/
 src-tauri/target/
-ckp_core/target/
+cpk_core/target/
 
 # IDE & Editor
 .vscode/

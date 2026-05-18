@@ -1,6 +1,6 @@
-# ckp_qc 工业大数据与 AI 专家系统战略演进路线图 (Roadmap)
+# cpk_qc 工业大数据与 AI 专家系统战略演进路线图 (Roadmap)
 
-本文档旨在规划 `ckp_qc` 项目从**“单点桌面级统计分析工具”**向**“工业级大质量数据中台与 AI 预决策系统 (Industrial Quality BI & AI Predictive Platform)”**演进的战略蓝图。通过将孤立的 Excel 抽样测试数据沉淀至高性能时序数据库，结合精益六西格玛制造标准与工业大模型挖掘，为未来灯塔工厂 (Lighthouse Factory) 提供核心智造引擎。
+本文档旨在规划 `cpk_qc` 项目从**“单点桌面级统计分析工具”**向**“工业级大质量数据中台与 AI 预决策系统 (Industrial Quality BI & AI Predictive Platform)”**演进的战略蓝图。通过将孤立的 Excel 抽样测试数据沉淀至高性能时序数据库，结合精益六西格玛制造标准与工业大模型挖掘，为未来灯塔工厂 (Lighthouse Factory) 提供核心智造引擎。
 
 ---
 

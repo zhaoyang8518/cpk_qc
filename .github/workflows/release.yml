@@ -41,7 +41,7 @@ jobs:
         with:
           projectPath: './src-tauri'
           tagName: ${{ github.ref_name }}
-          releaseName: 'ckp_qc ${{ github.ref_name }}'
+          releaseName: 'cpk_qc ${{ github.ref_name }}'
           releaseBody: '自动化构建发布的跨平台精益六西格玛质量控制分析引擎。'
           releaseDraft: true
           prerelease: false
@@ -77,7 +77,7 @@ jobs:
         with:
           projectPath: './src-tauri'
           tagName: ${{ github.ref_name }}
-          releaseName: 'ckp_qc ${{ github.ref_name }}'
+          releaseName: 'cpk_qc ${{ github.ref_name }}'
           releaseBody: '自动化构建发布的跨平台精益六西格玛质量控制分析引擎。'
           releaseDraft: true
           prerelease: false

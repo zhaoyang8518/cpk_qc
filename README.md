@@ -1,13 +1,13 @@
-# ckp_qc (CPK 与质量控制统计分析软件)
+# cpk_qc (CPK 与质量控制统计分析软件)
 
 ![Tauri](https://img.shields.io/badge/Tauri-2.0-241b35?style=for-the-badge&logo=tauri)
 ![React](https://img.shields.io/badge/React-18.2-61dafb?style=for-the-badge&logo=react)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38b2ac?style=for-the-badge&logo=tailwind-css)
 ![Rust](https://img.shields.io/badge/Rust-2021-dea584?style=for-the-badge&logo=rust)
 ![ECharts](https://img.shields.io/badge/Apache_ECharts-5.5-e43961?style=for-the-badge&logo=apache-echarts)
-![CI](https://img.shields.io/github/actions/workflow/status/zhaoyang8518/ckp_qc/build.yml?style=for-the-badge&label=Build)
+![CI](https://img.shields.io/github/actions/workflow/status/zhaoyang8518/cpk_qc/build.yml?style=for-the-badge&label=Build)
 
-**ckp_qc** 是一款专为工业制造与质量控制（QC）领域打造的跨平台桌面级统计分析软件。采用 **Tauri 2.0 + React 18 + Rust** 技术栈构建，专注于对大体积（8MB+）多 Sheet 工作表中的 PCBA 测试数据进行极速解析、直方图分箱计算、正态分布曲线拟合以及单板条码双向追溯。
+**cpk_qc** 是一款专为工业制造与质量控制（QC）领域打造的跨平台桌面级统计分析软件。采用 **Tauri 2.0 + React 18 + Rust** 技术栈构建，专注于对大体积（8MB+）多 Sheet 工作表中的 PCBA 测试数据进行极速解析、直方图分箱计算、正态分布曲线拟合以及单板条码双向追溯。
 
 ---
 
@@ -43,10 +43,10 @@
 项目采用 **Cargo Workspace** 结构进行严格的模块化解耦：
 
 ```text
-ckp_qc/
+cpk_qc/
 ├── Cargo.toml               # 顶层 Cargo 工作空间配置
 ├── package.json             # 前端项目与构建脚本配置
-├── ckp_core/                # [Rust Crate] 核心 Excel 解析与数据建模引擎
+├── cpk_core/                # [Rust Crate] 核心 Excel 解析与数据建模引擎
 │   ├── Cargo.toml
 │   └── src/lib.rs           # calamine 多 Sheet 异步解析逻辑与 DTO 定义
 ├── src-tauri/               # [Rust Crate] Tauri 桌面应用主进程
@@ -68,11 +68,11 @@ ckp_qc/
 
 | 平台 | 开发调试 | 安装包构建 | 获取方式 |
 |------|:--------:|:----------:|----------|
-| **macOS** (x86_64 / aarch64) | ✅ | ✅ `.dmg` | 本地构建 / [GitHub Actions Artifacts](https://github.com/zhaoyang8518/ckp_qc/actions) |
-| **Windows** (x86_64) | — | ✅ `.msi` | [GitHub Actions Artifacts](https://github.com/zhaoyang8518/ckp_qc/actions) |
+| **macOS** (x86_64 / aarch64) | ✅ | ✅ `.dmg` | 本地构建 / [GitHub Actions Artifacts](https://github.com/zhaoyang8518/cpk_qc/actions) |
+| **Windows** (x86_64) | — | ✅ `.msi` | [GitHub Actions Artifacts](https://github.com/zhaoyang8518/cpk_qc/actions) |
 | **Linux** | ✅ | 待支持 | 本地 `pnpm tauri dev` |
 
-> **安装包自动构建**：每次向 `main` 分支推送代码，GitHub Actions 自动构建 Windows 和 macOS 安装包，可在 [Actions](https://github.com/zhaoyang8518/ckp_qc/actions) 页面下载最新 Artifact。
+> **安装包自动构建**：每次向 `main` 分支推送代码，GitHub Actions 自动构建 Windows 和 macOS 安装包，可在 [Actions](https://github.com/zhaoyang8518/cpk_qc/actions) 页面下载最新 Artifact。
 
 ---
 
@@ -96,8 +96,8 @@ sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-
 ### 本地开发调试
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/zhaoyang8518/ckp_qc.git
-cd ckp_qc
+git clone https://github.com/zhaoyang8518/cpk_qc.git
+cd cpk_qc
 
 # 2. 安装前端依赖
 pnpm install
@@ -113,8 +113,8 @@ pnpm tauri build
 ```
 
 构建完成后，安装包位于：
-* **macOS DMG**：`target/release/bundle/dmg/ckp_qc_0.1.0_aarch64.dmg`
-* **Windows MSI**：`target/release/bundle/msi/ckp_qc_0.1.0_x64.msi`
+* **macOS DMG**：`target/release/bundle/dmg/cpk_qc_0.1.0_aarch64.dmg`
+* **Windows MSI**：`target/release/bundle/msi/cpk_qc_0.1.0_x64.msi`
 
 ### 仅启动前端（不启动 Tauri）
 ```bash
@@ -131,7 +131,7 @@ pnpm dev    # Vite 开发服务器 http://localhost:5173
 * **构建平台**：`windows-latest` 和 `macos-latest`
 * **产物**：Windows `.msi` + macOS `.dmg`
 
-下载路径：[GitHub Actions → 最新 Run → Artifacts](https://github.com/zhaoyang8518/ckp_qc/actions)
+下载路径：[GitHub Actions → 最新 Run → Artifacts](https://github.com/zhaoyang8518/cpk_qc/actions)
 
 ---
 
