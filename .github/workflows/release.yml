@@ -68,7 +68,6 @@ jobs:
           updaterJsonPreferNsis: true
 
   build-macos:
-    needs: build-windows
     runs-on: macos-latest
 
     steps:

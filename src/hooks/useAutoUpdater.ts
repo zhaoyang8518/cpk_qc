@@ -156,10 +156,17 @@ export const useAutoUpdater = (locale: Locale) => {
         }
       });
 
-      await relaunch();
     } catch (error) {
       console.error("Update installation failed", error);
       setUpdateState((prev) => ({ ...prev, downloading: false, downloadProgress: 0 }));
+      window.alert(t("updateInstallFailed", locale));
+      return;
+    }
+
+    try {
+      await relaunch();
+    } catch (relaunchError) {
+      console.error("Relaunch failed after update", relaunchError);
       window.alert(t("updateInstallFailed", locale));
     }
   };
