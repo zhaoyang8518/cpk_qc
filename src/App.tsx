@@ -1,28 +1,19 @@
-import React, { useMemo, useState, useRef } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import React, { useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { writeFile } from "@tauri-apps/plugin-fs";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as echarts from "echarts";
-import { FileSpreadsheet } from "lucide-react";
-import { SheetData } from "./types";
+import { CpkStatus, SheetData } from "./types";
 import Header from "./components/Header";
 import SheetNav from "./components/SheetNav";
 import PcbaList from "./components/PcbaList";
-import ChartGrid from "./components/ChartGrid";
 import SettingsModal from "./components/SettingsModal";
+import MainContent from "./components/MainContent";
+import ExportProgressModal from "./components/ExportProgressModal";
 import { t, Locale, LocaleProvider } from "./i18n";
-
-export type CpkStatus = "red" | "yellow" | "green" | "cyan";
-
-const getCpkStatus = (cpk: number | null): CpkStatus => {
-  if (cpk !== null && cpk !== undefined && cpk >= 2.0) return "cyan";
-  if (cpk !== null && cpk !== undefined && cpk >= 1.33) return "green";
-  if (cpk !== null && cpk !== undefined && cpk >= 1.0) return "yellow";
-  return "red";
-};
+import { RfMappingConfig, DEFAULT_RF_MAPPINGS, parseRFIndicator } from "./utils/rfParser";
+import { getCpkStatus } from "./utils/cpk";
+import { useResizableSidebar } from "./hooks/useResizableSidebar";
+import { useRfFilters } from "./hooks/useRfFilters";
+import { usePdfExport } from "./hooks/usePdfExport";
 
 const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>("en");
@@ -32,47 +23,66 @@ const App: React.FC = () => {
   const [displayFileName, setDisplayFileName] = useState<string>("");
   const [gridCols, setGridCols] = useState<number>(2);
   const [selectedIndicatorIdx, setSelectedIndicatorIdx] = useState<number | null>(null);
+
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState<string>("");
   const [enabledCpkStatuses, setEnabledCpkStatuses] = useState<Set<CpkStatus>>(
     () => new Set(["red", "yellow", "green", "cyan"])
   );
 
-  const [exportProgress, setExportProgress] = useState<{
-    visible: boolean;
-    percent: number;
-    text: string;
-  }>({ visible: false, percent: 0, text: "" });
-
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
 
-  const [sidebarWidth, setSidebarWidth] = useState<number>(272);
-  const isResizing = useRef(false);
-
-  const startResizing = (mouseDownEvent: React.MouseEvent) => {
-    mouseDownEvent.preventDefault();
-    isResizing.current = true;
-
-    const handleMouseMove = (mouseMoveEvent: MouseEvent) => {
-      if (!isResizing.current) return;
-      const newWidth = mouseMoveEvent.clientX;
-      if (newWidth >= 200 && newWidth <= 600) {
-        setSidebarWidth(newWidth);
+  // RF Custom Mappings State
+  const [rfMappings, setRfMappings] = useState<RfMappingConfig>(() => {
+    const saved = localStorage.getItem("cpk_qc_rf_mappings");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse RF mapping configuration", e);
       }
-    };
-
-    const handleMouseUp = () => {
-      isResizing.current = false;
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-  };
+    }
+    return DEFAULT_RF_MAPPINGS;
+  });
 
   const currentSheet = useMemo(() => sheets[activeSheetIdx] || null, [sheets, activeSheetIdx]);
+  const { sidebarWidth, startResizing } = useResizableSidebar();
+  const {
+    selectedDevice,
+    selectedFreq,
+    selectedRate,
+    activeView,
+    setSelectedRate,
+    setActiveView,
+    resetRfFilters,
+    resetRfView,
+    deviceOptions,
+    availableFrequencies,
+    availableRates,
+    handleDeviceChange,
+    handleFrequencyChange,
+    selectHeatmapCell,
+  } = useRfFilters(currentSheet, rfMappings);
+  const { exportProgress, handleExport } = usePdfExport({
+    sheets,
+    activeSheetIdx,
+    displayFileName,
+    rfMappings,
+    locale,
+  });
+
+  const handleRfMappingsChange = (newMappings: RfMappingConfig) => {
+    setRfMappings(newMappings);
+    localStorage.setItem("cpk_qc_rf_mappings", JSON.stringify(newMappings));
+    resetRfFilters();
+  };
+
+  const handleRfMappingsReset = () => {
+    setRfMappings(DEFAULT_RF_MAPPINGS);
+    localStorage.setItem("cpk_qc_rf_mappings", JSON.stringify(DEFAULT_RF_MAPPINGS));
+    resetRfFilters();
+  };
 
   const handleImport = async () => {
     try {
@@ -93,6 +103,7 @@ const App: React.FC = () => {
       setSheets(res);
       setActiveSheetIdx(0);
       setSelectedIndicatorIdx(null);
+      resetRfView();
       setDisplayFileName(selectedPath.split(/[/\\]/).pop() || selectedPath);
     } catch (err: any) {
       alert(`${t("importFailed", locale)}${err}`);
@@ -101,234 +112,38 @@ const App: React.FC = () => {
     }
   };
 
-  const handleExport = async () => {
-    if (!sheets || sheets.length === 0) {
-      alert(t("noDataExport", locale));
-      return;
-    }
-
-    const sheet = sheets[activeSheetIdx];
-    if (!sheet || !sheet.indicators || sheet.indicators.length === 0) {
-      alert(t("noIndicatorExport", locale));
-      return;
-    }
-
-    try {
-      setExportProgress({ visible: true, percent: 5, text: t("exportInit", locale) });
-      await new Promise((r) => setTimeout(r, 10));
-
-      const pdf = new jsPDF("p", "mm", "a4");
-      const margin = 14;
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const contentW = pageWidth - margin * 2;
-
-      setExportProgress({ visible: true, percent: 10, text: t("exportFont", locale) });
-      try {
-        const fontRes = await fetch("/fonts/SimHei_subset.ttf");
-        const fontBlob = await fontRes.blob();
-        const fontBase64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64 = (reader.result as string).split(",")[1];
-            resolve(base64);
-          };
-          reader.readAsDataURL(fontBlob);
-        });
-
-        pdf.addFileToVFS("SimHei.ttf", fontBase64);
-        pdf.addFont("SimHei.ttf", "SimHei", "normal");
-        pdf.setFont("SimHei");
-      } catch (fontErr) {
-        console.warn("Failed to load SimHei font, falling back to default jsPDF font", fontErr);
-      }
-
-      let y = margin + 12;
-      pdf.setFontSize(24);
-      pdf.setTextColor(15, 23, 42);
-      pdf.text(t("reportMainTitle", locale), margin, y);
-
-      y += 6;
-      pdf.setFontSize(10);
-      pdf.setTextColor(100, 115, 130);
-      pdf.text(t("reportSubtitle", locale), margin, y);
-
-      y += 12;
-      pdf.setFontSize(14);
-      pdf.setTextColor(30, 41, 59);
-      pdf.text(t("reportInfoTitle", locale), margin, y);
-      y += 6;
-
-      const now = new Date();
-      const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-      const infoRows = [
-        [t("infoFileName", locale), displayFileName || t("noFile", locale)],
-        [t("infoSheetName", locale), sheet.sheet_name],
-        [t("infoTime", locale), ts],
-        [t("infoIndCount", locale), String(sheet.indicators.length)],
-        [t("infoSampleCount", locale), String(sheet.pcbasn_list.length)],
-      ];
-
-      pdf.setFontSize(10);
-      for (const [label, value] of infoRows) {
-        pdf.setTextColor(100, 110, 130);
-        pdf.text(label, margin, y);
-        pdf.setTextColor(30, 41, 59);
-        pdf.text(value, margin + 40, y);
-        y += 6.5;
-      }
-
-      y += 6;
-      pdf.setFontSize(14);
-      pdf.setTextColor(30, 41, 59);
-      pdf.text(t("execSummaryTitle", locale), margin, y);
-      y += 6;
-      pdf.setFontSize(9);
-      pdf.setTextColor(71, 85, 105);
-      const summaryText = t("execSummaryText", locale);
-      const splitSummary = pdf.splitTextToSize(summaryText, contentW);
-      pdf.text(splitSummary, margin, y);
-      y += splitSummary.length * 5 + 8;
-
-      setExportProgress({ visible: true, percent: 15, text: t("exportCapSummaryTable", locale) });
-      pdf.setFontSize(14);
-      pdf.text(t("capSummaryTitle", locale), margin, y);
-      y += 4;
-
-      const totalInds = sheet.indicators.length;
-      const statusSummaryData = [
-        [t("worldClass", locale), "CPK ≥ 2.00 (≥ 6 Sigma)", String(cpkStatusCounts.cyan), `${((cpkStatusCounts.cyan / totalInds) * 100 || 0).toFixed(1)}%`, t("capWorldClassDesc", locale)],
-        [t("good", locale), "1.33 ≤ CPK < 2.00 (4~6 Sigma)", String(cpkStatusCounts.green), `${((cpkStatusCounts.green / totalInds) * 100 || 0).toFixed(1)}%`, t("capGoodDesc", locale)],
-        [t("passable", locale), "1.00 ≤ CPK < 1.33 (3~4 Sigma)", String(cpkStatusCounts.yellow), `${((cpkStatusCounts.yellow / totalInds) * 100 || 0).toFixed(1)}%`, t("capPassableDesc", locale)],
-        [t("fail", locale), "CPK < 1.00 (< 3 Sigma)", String(cpkStatusCounts.red), `${((cpkStatusCounts.red / totalInds) * 100 || 0).toFixed(1)}%`, t("capFailDesc", locale)],
-      ];
-
-      autoTable(pdf, {
-        startY: y,
-        head: [[t("capLevelName", locale), t("capCriteria", locale), t("capIndCount", locale), t("capRatio", locale), t("capDesc", locale)]],
-        body: statusSummaryData,
-        theme: "grid",
-        styles: { font: "SimHei" },
-        headStyles: { fillColor: [15, 23, 42] },
-      });
-
-      y = (pdf as any).lastAutoTable.finalY + 12;
-      setExportProgress({ visible: true, percent: 25, text: t("exportIndIndexTable", locale) });
-      pdf.setFontSize(14);
-      pdf.text(t("indIndexTitle", locale), margin, y);
-      y += 4;
-
-      const sorted = [...sheet.indicators].sort((a, b) => (b.cpk ?? -Infinity) - (a.cpk ?? -Infinity));
-      const indTableData = sorted.map((ind, idx) => [
-        String(idx + 1),
-        ind.name,
-        ind.average?.toFixed(2) ?? "-",
-        ind.stdev?.toFixed(4) ?? "-",
-        ind.cpk?.toFixed(2) ?? "-",
-      ]);
-
-      autoTable(pdf, {
-        startY: y,
-        head: [["#", t("indName", locale), t("indMean", locale), t("indStdev", locale), t("indCpk", locale)]],
-        body: indTableData,
-        theme: "striped",
-        styles: { font: "SimHei" },
-      });
-
-      const targetIndicators = sheet.indicators
-        .map((ind, index) => ({ ind, index }))
-        .filter(({ ind }) => {
-          const st = getCpkStatus(ind.cpk);
-          return st === "red" || st === "yellow";
-        });
-
-      if (targetIndicators.length > 0) {
-        for (let i = 0; i < targetIndicators.length; i++) {
-          const { ind, index: idx } = targetIndicators[i];
-          setExportProgress({ visible: true, percent: 30 + (i / targetIndicators.length) * 60, text: `${t("exportExtractChart", locale)}: ${ind.name.slice(0, 10)}` });
-          const cardEl = document.getElementById(`indicator-card-${idx}`);
-          if (!cardEl) continue;
-          const chartDom = cardEl.querySelector(".echarts-for-react") || cardEl.querySelector("div[_echarts_instance_]") || cardEl;
-          const chartInstance = echarts.getInstanceByDom(chartDom as HTMLElement);
-          let imgData: string | null = null;
-          let imgW = 160;
-          let imgH = 100;
-          if (chartInstance) {
-            imgData = chartInstance.getDataURL({
-              type: "png",
-              pixelRatio: 2,
-              backgroundColor: "#0f172a",
-            });
-          } else {
-            const canvas = await html2canvas(cardEl as HTMLElement, {
-              scale: 2,
-              backgroundColor: "#0f172a",
-              logging: false,
-            });
-            imgData = canvas.toDataURL("image/png");
-            imgW = 160;
-            imgH = (canvas.height / canvas.width) * imgW;
-          }
-
-          if (y + imgH + 15 > pdf.internal.pageSize.getHeight() - margin) {
-            pdf.addPage();
-            y = margin;
-          } else {
-            y += 10;
-          }
-
-          pdf.setFontSize(12);
-          pdf.setTextColor(30, 41, 59);
-          pdf.text(`[${t("abnormalAnalysisTitle", locale)}] #${idx + 1} - ${ind.name}`, margin, y);
-          y += 5;
-
-          pdf.addImage(imgData, "PNG", margin, y, imgW, imgH);
-          y += imgH + 5;
-        }
-      }
-
-      setExportProgress({ visible: true, percent: 92, text: t("exportSaveLoc", locale) });
-      await new Promise((r) => setTimeout(r, 100));
-
-      const defaultFileName = `CPK_Report_${sheet.sheet_name}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
-      const savePath = await save({
-        defaultPath: defaultFileName,
-        filters: [{ name: "PDF Report", extensions: ["pdf"] }],
-      });
-
-      if (!savePath) {
-        setExportProgress({ visible: false, percent: 0, text: "" });
-        return;
-      }
-
-      setExportProgress({ visible: true, percent: 95, text: t("exportWriteDisk", locale) });
-      await new Promise((r) => setTimeout(r, 100));
-
-      const pdfBuffer = pdf.output("arraybuffer");
-      await writeFile(savePath, new Uint8Array(pdfBuffer));
-
-      setExportProgress({ visible: true, percent: 100, text: t("exportSuccess", locale) });
-      await new Promise((r) => setTimeout(r, 500));
-
-      alert(t("exportSuccess", locale));
-    } catch (err: any) {
-      alert(`${t("exportFailed", locale)}${err}`);
-    } finally {
-      setExportProgress({ visible: false, percent: 0, text: "" });
-    }
-  };
-
   const visibleIndicators = useMemo(() => {
     const indicators = currentSheet?.indicators || [];
     const query = indicatorSearchQuery.trim().toLowerCase();
+
     return indicators
       .map((indicator, index) => ({ indicator, index }))
       .filter(({ indicator }) => {
-        const matchesSearch = !query || indicator.name.toLowerCase().includes(query);
+        const parsed = parseRFIndicator(indicator.name, rfMappings);
+
+        const matchesSearch =
+          !query ||
+          indicator.name.toLowerCase().includes(query) ||
+          parsed.displayName.toLowerCase().includes(query);
+
         const matchesStatus = enabledCpkStatuses.has(getCpkStatus(indicator.cpk));
-        return matchesSearch && matchesStatus;
+
+        let matchesDevice = true;
+        if (selectedDevice) {
+          if (selectedDevice === "BLE") {
+            matchesDevice = parsed.protocol === "BLE";
+          } else if (selectedDevice.startsWith("Wi-Fi_")) {
+            const type = selectedDevice.replace("Wi-Fi_", "");
+            matchesDevice = parsed.protocol === "Wi-Fi" && parsed.testType === type;
+          }
+        }
+
+        const matchesFreq = selectedFreq === null || parsed.frequency === selectedFreq;
+        const matchesRate = selectedRate === null || parsed.rate === selectedRate;
+
+        return matchesSearch && matchesStatus && matchesDevice && matchesFreq && matchesRate;
       });
-  }, [currentSheet?.indicators, indicatorSearchQuery, enabledCpkStatuses]);
+  }, [currentSheet?.indicators, indicatorSearchQuery, enabledCpkStatuses, selectedDevice, selectedFreq, selectedRate, rfMappings]);
 
   const visibleIndicatorIndexes = useMemo(() => new Set(visibleIndicators.map(({ index }) => index)), [visibleIndicators]);
 
@@ -375,27 +190,36 @@ const App: React.FC = () => {
               });
             }}
             width={sidebarWidth}
+            rfMappings={rfMappings}
           />
 
-          {/* 可拖拽改变宽度的分隔线 */}
           <div
             onMouseDown={startResizing}
             className="w-1 bg-slate-800 hover:bg-blue-500/80 active:bg-blue-600 cursor-col-resize transition-colors h-full z-20 relative shrink-0 border-l border-slate-700/30 border-r border-slate-700/30"
           />
 
-          {/* 右侧统计图表矩阵 */}
-          <main className="flex-1 overflow-y-auto p-6 bg-slate-900/50 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-            <ChartGrid
-              indicators={currentSheet?.indicators || []}
-              visibleIndicatorIndexes={visibleIndicatorIndexes}
-              gridCols={gridCols}
-              pcbasnList={currentSheet?.pcbasn_list || []}
-              selectedIndicatorIdx={selectedIndicatorIdx}
-              onSelectIndicator={setSelectedIndicatorIdx}
-              chartTheme={chartTheme}
-              lineWidth={lineWidth}
-            />
-          </main>
+          <MainContent
+            currentSheet={currentSheet}
+            visibleIndicatorIndexes={visibleIndicatorIndexes}
+            gridCols={gridCols}
+            selectedIndicatorIdx={selectedIndicatorIdx}
+            onSelectIndicator={setSelectedIndicatorIdx}
+            chartTheme={chartTheme}
+            lineWidth={lineWidth}
+            rfMappings={rfMappings}
+            deviceOptions={deviceOptions}
+            selectedDevice={selectedDevice}
+            onDeviceChange={handleDeviceChange}
+            availableFrequencies={availableFrequencies}
+            selectedFreq={selectedFreq}
+            onFrequencyChange={handleFrequencyChange}
+            availableRates={availableRates}
+            selectedRate={selectedRate}
+            onRateChange={setSelectedRate}
+            activeView={activeView}
+            onViewChange={setActiveView}
+            onHeatmapCellSelect={selectHeatmapCell}
+          />
         </div>
 
         {/* 底部 Sheet 横向滚动导航栏 */}
@@ -405,6 +229,7 @@ const App: React.FC = () => {
           onSheetChange={(idx) => {
             setActiveSheetIdx(idx);
             setSelectedIndicatorIdx(null);
+            resetRfView();
           }}
         />
 
@@ -416,37 +241,12 @@ const App: React.FC = () => {
           onChangeTheme={setChartTheme}
           lineWidth={lineWidth}
           onChangeLineWidth={setLineWidth}
+          rfMappings={rfMappings}
+          onChangeRfMappings={handleRfMappingsChange}
+          onResetRfMappings={handleRfMappingsReset}
         />
 
-        {/* 导出进度条模态弹窗 */}
-        {exportProgress.visible && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm select-none">
-            <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 w-96 shadow-2xl space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-400">
-                  <FileSpreadsheet className="w-6 h-6 animate-pulse" />
-                </div>
-                <div>
-                  <h3 className="text-slate-200 font-bold text-sm">{t("generatingReport", locale)}</h3>
-                  <p className="text-xs text-slate-400">{t("generatingReportDesc", locale)}</p>
-                </div>
-              </div>
-              
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-mono">
-                  <span className="text-slate-400">{exportProgress.text}</span>
-                  <span className="text-blue-400 font-bold">{exportProgress.percent}%</span>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
-                  <div
-                    className="bg-gradient-to-r from-blue-500 to-cyan-400 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${exportProgress.percent}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <ExportProgressModal progress={exportProgress} />
       </div>
     </LocaleProvider>
   );

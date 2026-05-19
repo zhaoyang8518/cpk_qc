@@ -18,3 +18,5 @@ export interface SheetData {
   pcbasn_list: string[];
   indicators: IndicatorSummary[];
 }
+
+export type CpkStatus = "red" | "yellow" | "green" | "cyan";

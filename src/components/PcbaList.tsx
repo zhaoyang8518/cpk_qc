@@ -1,8 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { Search, BarChart2, ListFilter } from "lucide-react";
-import { IndicatorSummary } from "../types";
-import { CpkStatus } from "../App";
+import { CpkStatus, IndicatorSummary } from "../types";
 import { t, useLocale } from "../i18n";
+import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
 
 interface PcbaListProps {
   indicators: IndicatorSummary[];
@@ -15,9 +15,10 @@ interface PcbaListProps {
   statusCounts: Record<CpkStatus, number>;
   onToggleStatus: (status: CpkStatus) => void;
   width?: number;
+  rfMappings: RfMappingConfig;
 }
 
-const ITEM_HEIGHT = 44; // 固定行高
+const ITEM_HEIGHT = 48; // 固定行高，支持两行文本展示
 const BUFFER_ITEMS = 10; // 前后缓冲渲染数量
 
 const formatCpk = (cpk: number | null) => (cpk === null || cpk === undefined ? "N/A" : cpk.toFixed(2));
@@ -41,6 +42,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
   statusCounts,
   onToggleStatus,
   width,
+  rfMappings,
 }) => {
   const { locale } = useLocale();
   const [scrollTop, setScrollTop] = useState<number>(0);
@@ -192,6 +194,8 @@ const PcbaList: React.FC<PcbaListProps> = ({
               const { indicator, index } = item;
               const isSelected = selectedIndicatorIdx === index;
               const cpkColor = getCpkColor(indicator.cpk);
+              const parsed = parseRFIndicator(indicator.name, rfMappings);
+              
               return (
                 <div
                   key={`${index}-${indicator.name}`}
@@ -202,17 +206,22 @@ const PcbaList: React.FC<PcbaListProps> = ({
                       : "text-slate-300 hover:bg-slate-700/40 hover:text-white"
                     }`}
                 >
-                  <div className="flex items-center space-x-2 truncate">
+                  <div className="flex items-center space-x-2 truncate mr-2 max-w-[70%]">
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${isSelected ? "bg-blue-400 animate-pulse" : "bg-slate-600 group-hover:bg-slate-400"
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? "bg-blue-400 animate-pulse" : "bg-slate-600 group-hover:bg-slate-400"
                         }`}
                     />
-                    <span className="truncate" title={indicator.name}>
-                      {indicator.name}
-                    </span>
+                    <div className="flex flex-col truncate leading-tight py-1">
+                      <span className="truncate" title={parsed.displayName}>
+                        {parsed.displayName}
+                      </span>
+                      <span className="text-[9px] text-slate-500 font-mono truncate" title={indicator.name}>
+                        {indicator.name}
+                      </span>
+                    </div>
                   </div>
                   <span
-                    className={`text-[8px] px-1.5 py-0.5 rounded border ${isSelected ? "bg-blue-500 text-white border-blue-400" : cpkColor}`}
+                    className={`text-[8px] px-1.5 py-0.5 rounded border shrink-0 ${isSelected ? "bg-blue-500 text-white border-blue-400" : cpkColor}`}
                   >
                     CPK {formatCpk(indicator.cpk)}
                   </span>
