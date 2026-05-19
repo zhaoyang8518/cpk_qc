@@ -3,6 +3,7 @@ import ReactECharts from "echarts-for-react";
 import { Activity } from "lucide-react";
 import { IndicatorSummary } from "../types";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
+import { getRfDeviceFilterLabel, getRfDeviceFilterValue } from "../utils/rfFilters";
 import { t, useLocale } from "../i18n";
 
 interface RfHeatmapProps {
@@ -27,21 +28,27 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
 }) => {
   const { locale } = useLocale();
 
-  // 1. Group indicators by Frequency and Parameter Category
+  // 1. Group indicators by Frequency, Protocol, and Parameter Category
   const groupedData = useMemo(() => {
     const freqs = new Set<number>();
-    const types = new Set<string>();
+    const groupMap = new Map<string, { value: string; label: string; protocol: string; testType: string }>();
     
-    // Map of key `${freq}_${type}` -> list of indicators
     const map: Record<string, { name: string; cpk: number | null }[]> = {};
 
     indicators.forEach((ind) => {
       const parsed = parseRFIndicator(ind.name, rfMappings);
       if (parsed.frequency && parsed.testType) {
         freqs.add(parsed.frequency);
-        types.add(parsed.testType);
+
+        const groupValue = getRfDeviceFilterValue(parsed.protocol, parsed.testType);
+        groupMap.set(groupValue, {
+          value: groupValue,
+          label: getRfDeviceFilterLabel(parsed.protocol, parsed.testType),
+          protocol: parsed.protocol,
+          testType: parsed.testType,
+        });
         
-        const key = `${parsed.frequency}_${parsed.testType}`;
+        const key = `${parsed.frequency}_${groupValue}`;
         if (!map[key]) {
           map[key] = [];
         }
@@ -53,28 +60,27 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
     });
 
     const frequencies = Array.from(freqs).sort((a, b) => a - b);
-    const testTypes = Array.from(types).sort();
+    const groups = Array.from(groupMap.values()).sort((a, b) => a.label.localeCompare(b.label));
 
     return {
       frequencies,
-      testTypes,
+      groups,
       map,
     };
   }, [indicators, rfMappings]);
 
   // 2. Prepare ECharts Option
   const option = useMemo(() => {
-    const { frequencies, testTypes, map } = groupedData;
+    const { frequencies, groups, map } = groupedData;
 
     // ECharts series data: [x_index, y_index, worst_cpk, count, details]
     const data: any[] = [];
 
     frequencies.forEach((freq, xIdx) => {
-      testTypes.forEach((type, yIdx) => {
-        const key = `${freq}_${type}`;
+      groups.forEach((group, yIdx) => {
+        const key = `${freq}_${group.value}`;
         const items = map[key] || [];
         if (items.length > 0) {
-          // Calculate Worst CPK (the minimum CPK in this frequency/type category)
           const validCpkValues = items
             .map((item) => item.cpk)
             .filter((val): val is number => val !== null && val !== undefined);
@@ -84,16 +90,6 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
         }
       });
     });
-
-    const typeMap: Record<string, string> = {
-      PWR: "TX Power (功率)",
-      EVM: "EVM (误差矢量幅度)",
-      FRQ: "Freq Error (频率偏差)",
-      MSK: "Spectrum Mask (频谱模版)",
-      PER: "PER (误包率)",
-      RSI: "RSSI (接收强度)",
-      OTHER: "Test Item (其他测试项)",
-    };
 
     return {
       title: {
@@ -119,12 +115,11 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
           const details = val[4] as { name: string; cpk: number | null }[];
 
           const freqName = frequencies[xIdx];
-          const typeName = testTypes[yIdx];
-          const readableType = typeMap[typeName] || typeName;
+          const group = groups[yIdx];
 
           let html = `<div class="font-mono text-xs p-2 max-w-sm">`;
           html += `<div class="font-bold border-b border-slate-700 pb-1.5 mb-1.5 text-slate-100 flex justify-between items-center">`;
-          html += `<span>${readableType}</span>`;
+          html += `<span>${group.label}</span>`;
           html += `<span class="text-blue-400 font-bold">${freqName} MHz</span>`;
           html += `</div>`;
 
@@ -167,7 +162,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       },
       yAxis: {
         type: "category",
-        data: testTypes.map((t) => typeMap[t] || t),
+        data: groups.map((group) => group.label),
         splitArea: { show: true },
         axisLabel: { color: "#94a3b8", fontSize: 10 },
         axisLine: { lineStyle: { color: "#475569" } },
@@ -175,12 +170,16 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       visualMap: {
         min: 0,
         max: 3,
+        dimension: 2,
         splitNumber: 4,
         type: "piecewise",
         orient: "horizontal",
         left: "center",
         bottom: 15,
         textStyle: { color: "#94a3b8", fontSize: 10, fontFamily: "monospace" },
+        outOfRange: {
+          color: "#64748b",
+        },
         pieces: [
           { min: 2.0, label: "CPK ≥ 2.00 (世界级水平 / Cyan)", color: "#06b6d4" },
           { min: 1.33, max: 2.0, label: "1.33 ≤ CPK < 2.00 (制程良好 / Green)", color: "#10b981" },
@@ -222,17 +221,11 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       const xIdx = dataVal[0];
       const yIdx = dataVal[1];
       const freq = groupedData.frequencies[xIdx];
-      const type = groupedData.testTypes[yIdx];
-      
-      const key = `${freq}_${type}`;
-      const items = groupedData.map[key] || [];
-      const hasBle = items.some(item => {
-        const parsed = parseRFIndicator(item.name, rfMappings);
-        return parsed.protocol === "BLE";
-      });
-      
-      const deviceVal = hasBle ? "BLE" : `Wi-Fi_${type}`;
-      onSelectCell(freq, deviceVal);
+      const group = groupedData.groups[yIdx];
+
+      if (group) {
+        onSelectCell(freq, group.value);
+      }
     }
   };
 

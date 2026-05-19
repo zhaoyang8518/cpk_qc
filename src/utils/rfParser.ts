@@ -17,7 +17,7 @@ export const DEFAULT_RF_MAPPINGS: RfMappingConfig = {
     BLE: ["TBLE", "BLUE", "BT", "BLE"]
   },
   parameters: {
-    PWR: ["PWR", "POWER", "TXPWR", "TX_PWR", "LEVEL", "TPWR"],
+    PWR: ["PWR", "POWER", "TXPWR", "TX_PWR", "LEVEL", "TPWR", "TARGET_POWER", "TARGETPWR", "TARGET_PWR"],
     EVM: ["EVM", "TEVM", "MOD", "ERROR_VECTOR"],
     FRQ: ["FRQ", "FREQ", "ERROR", "OFFSET", "PPM"],
     MSK: ["MSK", "MASK", "SPEC_MASK", "SPECTRUM"],
@@ -25,6 +25,25 @@ export const DEFAULT_RF_MAPPINGS: RfMappingConfig = {
     RSI: ["RSI", "RSSI", "SENS", "RX_SENS", "RX_LEVEL"]
   }
 };
+
+const mergeAliases = (savedAliases: string[] | undefined, defaultAliases: string[]) => {
+  const aliases = new Set([...(savedAliases || []), ...defaultAliases]);
+  return Array.from(aliases);
+};
+
+export const mergeRfMappingsWithDefaults = (saved: Partial<RfMappingConfig>): RfMappingConfig => ({
+  protocols: {
+    BLE: mergeAliases(saved.protocols?.BLE, DEFAULT_RF_MAPPINGS.protocols.BLE),
+  },
+  parameters: {
+    PWR: mergeAliases(saved.parameters?.PWR, DEFAULT_RF_MAPPINGS.parameters.PWR),
+    EVM: mergeAliases(saved.parameters?.EVM, DEFAULT_RF_MAPPINGS.parameters.EVM),
+    FRQ: mergeAliases(saved.parameters?.FRQ, DEFAULT_RF_MAPPINGS.parameters.FRQ),
+    MSK: mergeAliases(saved.parameters?.MSK, DEFAULT_RF_MAPPINGS.parameters.MSK),
+    PER: mergeAliases(saved.parameters?.PER, DEFAULT_RF_MAPPINGS.parameters.PER),
+    RSI: mergeAliases(saved.parameters?.RSI, DEFAULT_RF_MAPPINGS.parameters.RSI),
+  },
+});
 
 export interface ParsedIndicator {
   rawName: string;
@@ -137,7 +156,7 @@ export function parseRFIndicator(rawName: string, config: RfMappingConfig): Pars
   };
 
   const readableType = typeMap[testType] || testType;
-  const protocolPrefix = protocol === "BLE" ? "BLE " : "";
+  const protocolPrefix = `${protocol} `;
   const freqStr = frequency ? `${frequency}MHz` : "";
   
   const detailParts: string[] = [];

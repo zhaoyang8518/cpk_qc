@@ -2,17 +2,18 @@ import { useMemo, useState } from "react";
 import { SheetData } from "../types";
 import { RfMappingConfig, parseRFIndicator } from "../utils/rfParser";
 import { MainView } from "../components/RfFilterBar";
+import { getRfDeviceFilterLabel, getRfDeviceFilterValue, matchesRfDeviceFilter } from "../utils/rfFilters";
 
 export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappingConfig) => {
-  const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  const [selectedFreq, setSelectedFreq] = useState<number | null>(null);
-  const [selectedRate, setSelectedRate] = useState<string | null>(null);
+  const [selectedDevices, setSelectedDevices] = useState<string[]>([]);
+  const [selectedFrequencies, setSelectedFrequencies] = useState<number[]>([]);
+  const [selectedRates, setSelectedRates] = useState<string[]>([]);
   const [activeView, setActiveView] = useState<MainView>("grid");
 
   const resetRfFilters = () => {
-    setSelectedDevice(null);
-    setSelectedFreq(null);
-    setSelectedRate(null);
+    setSelectedDevices([]);
+    setSelectedFrequencies([]);
+    setSelectedRates([]);
   };
 
   const resetRfView = () => {
@@ -22,41 +23,20 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
 
   const deviceOptions = useMemo(() => {
     if (!currentSheet) return [];
-    const options: { value: string; label: string }[] = [];
+    const optionMap = new Map<string, { value: string; label: string }>();
 
-    const hasBle = currentSheet.indicators.some(
-      (indicator) => parseRFIndicator(indicator.name, rfMappings).protocol === "BLE"
-    );
-    if (hasBle) {
-      options.push({ value: "BLE", label: "BLE" });
-    }
-
-    const wifiTypes = new Set<string>();
     currentSheet.indicators.forEach((indicator) => {
       const parsed = parseRFIndicator(indicator.name, rfMappings);
-      if (parsed.protocol === "Wi-Fi" && parsed.testType) {
-        wifiTypes.add(parsed.testType);
-      }
-    });
+      if (!parsed.testType) return;
 
-    const typeLabels: Record<string, string> = {
-      PWR: "Wi-Fi - TX Power",
-      EVM: "Wi-Fi - EVM",
-      FRQ: "Wi-Fi - Freq Error",
-      MSK: "Wi-Fi - Spectrum Mask",
-      PER: "Wi-Fi - PER",
-      RSI: "Wi-Fi - RSSI",
-      OTHER: "Wi-Fi - Other",
-    };
-
-    Array.from(wifiTypes).sort().forEach((type) => {
-      options.push({
-        value: `Wi-Fi_${type}`,
-        label: typeLabels[type] || `Wi-Fi - ${type}`,
+      const value = getRfDeviceFilterValue(parsed.protocol, parsed.testType);
+      optionMap.set(value, {
+        value,
+        label: getRfDeviceFilterLabel(parsed.protocol, parsed.testType),
       });
     });
 
-    return options;
+    return Array.from(optionMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [currentSheet, rfMappings]);
 
   const availableFrequencies = useMemo(() => {
@@ -66,13 +46,7 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
     currentSheet.indicators.forEach((indicator) => {
       const parsed = parseRFIndicator(indicator.name, rfMappings);
 
-      if (selectedDevice) {
-        if (selectedDevice === "BLE" && parsed.protocol !== "BLE") return;
-        if (selectedDevice.startsWith("Wi-Fi_")) {
-          const type = selectedDevice.replace("Wi-Fi_", "");
-          if (parsed.protocol !== "Wi-Fi" || parsed.testType !== type) return;
-        }
-      }
+      if (!matchesRfDeviceFilter(parsed, selectedDevices)) return;
 
       if (parsed.frequency) {
         freqs.add(parsed.frequency);
@@ -80,7 +54,7 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
     });
 
     return Array.from(freqs).sort((a, b) => a - b);
-  }, [currentSheet, selectedDevice, rfMappings]);
+  }, [currentSheet, selectedDevices, rfMappings]);
 
   const availableRates = useMemo(() => {
     if (!currentSheet) return [];
@@ -89,15 +63,9 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
     currentSheet.indicators.forEach((indicator) => {
       const parsed = parseRFIndicator(indicator.name, rfMappings);
 
-      if (selectedDevice) {
-        if (selectedDevice === "BLE" && parsed.protocol !== "BLE") return;
-        if (selectedDevice.startsWith("Wi-Fi_")) {
-          const type = selectedDevice.replace("Wi-Fi_", "");
-          if (parsed.protocol !== "Wi-Fi" || parsed.testType !== type) return;
-        }
-      }
+      if (!matchesRfDeviceFilter(parsed, selectedDevices)) return;
 
-      if (selectedFreq !== null && parsed.frequency !== selectedFreq) {
+      if (selectedFrequencies.length > 0 && (parsed.frequency === null || !selectedFrequencies.includes(parsed.frequency))) {
         return;
       }
 
@@ -107,32 +75,32 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
     });
 
     return Array.from(rates).sort();
-  }, [currentSheet, selectedDevice, selectedFreq, rfMappings]);
+  }, [currentSheet, selectedDevices, selectedFrequencies, rfMappings]);
 
-  const handleDeviceChange = (device: string | null) => {
-    setSelectedDevice(device);
-    setSelectedFreq(null);
-    setSelectedRate(null);
+  const handleDeviceChange = (devices: string[]) => {
+    setSelectedDevices(devices);
+    setSelectedFrequencies([]);
+    setSelectedRates([]);
   };
 
-  const handleFrequencyChange = (frequency: number | null) => {
-    setSelectedFreq(frequency);
-    setSelectedRate(null);
+  const handleFrequencyChange = (frequencies: number[]) => {
+    setSelectedFrequencies(frequencies);
+    setSelectedRates([]);
   };
 
   const selectHeatmapCell = (frequency: number | null, device: string | null) => {
-    setSelectedDevice(device);
-    setSelectedFreq(frequency);
-    setSelectedRate(null);
+    setSelectedDevices(device ? [device] : []);
+    setSelectedFrequencies(frequency !== null ? [frequency] : []);
+    setSelectedRates([]);
     setActiveView("grid");
   };
 
   return {
-    selectedDevice,
-    selectedFreq,
-    selectedRate,
+    selectedDevices,
+    selectedFrequencies,
+    selectedRates,
     activeView,
-    setSelectedRate,
+    setSelectedRates,
     setActiveView,
     resetRfFilters,
     resetRfView,

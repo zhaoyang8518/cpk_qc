@@ -50,7 +50,7 @@ export const translations = {
 
     // ChartGrid & CpkChart
     noChartData: "No Chart Data Available",
-    noChartDataDesc: "Please click 'Import Excel' at the top right to load sheet data. The system will automatically perform histogram binning and normal curve fitting analysis.",
+    noChartDataDesc: "Click 'Import Excel' at the top right, or drag & drop an Excel file (.xlsx / .xls) directly into the window. The system will automatically perform histogram binning and normal curve fitting analysis.",
     noFilterChartData: "No indicator charts match the filter criteria",
     selectedIndicator: "Selected Indicator",
     mean: "Mean μ",
@@ -96,6 +96,8 @@ export const translations = {
     rateFilter: "Rate / Bandwidth",
     allRates: "All Rates",
     allDevices: "All Items",
+    dragOverTitle: "Drop Excel File to Load",
+    dragDropHint: ".xlsx  /  .xls  /  .xlsm  /  .xlsb",
 
     // App / PDF Export
     noDataExport: "No data to export. Please import an Excel file first.",
@@ -212,7 +214,7 @@ export const translations = {
 
     // ChartGrid & CpkChart
     noChartData: "暂无统计图表数据",
-    noChartDataDesc: "请点击右上角“导入 Excel”按钮加载工作表数据，系统将自动进行直方图分箱与正态拟合分析。",
+    noChartDataDesc: "请点击右上角「导入 Excel」按钮，或将 Excel 文件 (.xlsx / .xls) 直接拖入此窗口，系统将自动进行直方图分箱与正态拟合分析。",
     noFilterChartData: "无符合过滤条件的检测项图表",
     selectedIndicator: "当前选中检测项",
     mean: "均值 μ",
@@ -258,6 +260,8 @@ export const translations = {
     rateFilter: "传输速率 / 带宽",
     allRates: "所有速率",
     allDevices: "所有设备/项",
+    dragOverTitle: "拖入 Excel 文件以加载",
+    dragDropHint: ".xlsx  /  .xls  /  .xlsm  /  .xlsb",
 
     // App / PDF Export
     noDataExport: "暂无分析数据可导出，请先导入 Excel 工作表。",

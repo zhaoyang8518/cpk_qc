@@ -1,88 +1,76 @@
 import React from "react";
 import { t, useLocale } from "../i18n";
+import MultiSelectFilter from "./MultiSelectFilter";
 
 export type MainView = "grid" | "heatmap";
 
 interface RfFilterBarProps {
   deviceOptions: { value: string; label: string }[];
-  selectedDevice: string | null;
-  onDeviceChange: (device: string | null) => void;
+  selectedDevices: string[];
+  onDeviceChange: (devices: string[]) => void;
   availableFrequencies: number[];
-  selectedFreq: number | null;
-  onFrequencyChange: (frequency: number | null) => void;
+  selectedFrequencies: number[];
+  onFrequencyChange: (frequencies: number[]) => void;
   availableRates: string[];
-  selectedRate: string | null;
-  onRateChange: (rate: string | null) => void;
+  selectedRates: string[];
+  onRateChange: (rates: string[]) => void;
   activeView: MainView;
   onViewChange: (view: MainView) => void;
 }
 
 const RfFilterBar: React.FC<RfFilterBarProps> = ({
   deviceOptions,
-  selectedDevice,
+  selectedDevices,
   onDeviceChange,
   availableFrequencies,
-  selectedFreq,
+  selectedFrequencies,
   onFrequencyChange,
   availableRates,
-  selectedRate,
+  selectedRates,
   onRateChange,
   activeView,
   onViewChange,
 }) => {
   const { locale } = useLocale();
+  const frequencyOptions = availableFrequencies.map((frequency) => ({
+    value: String(frequency),
+    label: `${frequency} MHz`,
+  }));
+  const rateOptions = availableRates.map((rate) => ({
+    value: rate,
+    label: rate,
+  }));
 
   return (
-    <div className="flex items-center justify-between px-6 py-2.5 bg-slate-900/40 border-b border-slate-800 shrink-0">
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <span className="text-[10px] text-slate-500 font-mono font-bold uppercase">{t("deviceFilter", locale)}:</span>
-          <select
-            value={selectedDevice || ""}
-            onChange={(e) => onDeviceChange(e.target.value || null)}
-            className="bg-slate-950 border border-slate-750/80 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-blue-500 font-mono transition-colors cursor-pointer"
-          >
-            <option value="">{t("allDevices", locale)}</option>
-            {deviceOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="flex items-center justify-between gap-4 px-6 py-2.5 bg-slate-900/40 border-b border-slate-800 shrink-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <MultiSelectFilter
+          label={t("deviceFilter", locale)}
+          options={deviceOptions}
+          selectedValues={selectedDevices}
+          onChange={onDeviceChange}
+          placeholder={t("allDevices", locale)}
+          widthClassName="w-64"
+        />
 
-        <div className="flex items-center space-x-2">
-          <span className="text-[10px] text-slate-500 font-mono font-bold uppercase">{t("freqFilter", locale)}:</span>
-          <select
-            value={selectedFreq || ""}
-            onChange={(e) => onFrequencyChange(e.target.value ? parseInt(e.target.value) : null)}
-            className="bg-slate-950 border border-slate-750/80 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-blue-500 font-mono transition-colors cursor-pointer"
-          >
-            <option value="">{t("allFreq", locale)}</option>
-            {availableFrequencies.map((frequency) => (
-              <option key={frequency} value={frequency}>
-                {frequency} MHz
-              </option>
-            ))}
-          </select>
-        </div>
+        <MultiSelectFilter
+          label={t("freqFilter", locale)}
+          options={frequencyOptions}
+          selectedValues={selectedFrequencies.map(String)}
+          onChange={(values) => onFrequencyChange(values.map((value) => parseInt(value)))}
+          placeholder={t("allFreq", locale)}
+          widthClassName="w-48"
+        />
 
         {availableRates.length > 0 && (
-          <div className="flex items-center space-x-2 transition-all">
-            <span className="text-[10px] text-slate-500 font-mono font-bold uppercase">{t("rateFilter", locale)}:</span>
-            <select
-              value={selectedRate || ""}
-              onChange={(e) => onRateChange(e.target.value || null)}
-              className="bg-slate-950 border border-slate-750/80 rounded-lg px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-blue-500 font-mono transition-colors cursor-pointer"
-            >
-              <option value="">{t("allRates", locale)}</option>
-              {availableRates.map((rate) => (
-                <option key={rate} value={rate}>
-                  {rate}
-                </option>
-              ))}
-            </select>
-          </div>
+          <MultiSelectFilter
+            label={t("rateFilter", locale)}
+            options={rateOptions}
+            selectedValues={selectedRates}
+            onChange={onRateChange}
+            placeholder={t("allRates", locale)}
+            widthClassName="w-56"
+          />
         )}
       </div>
 

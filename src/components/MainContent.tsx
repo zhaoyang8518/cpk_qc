@@ -15,14 +15,14 @@ interface MainContentProps {
   lineWidth: number;
   rfMappings: RfMappingConfig;
   deviceOptions: { value: string; label: string }[];
-  selectedDevice: string | null;
-  onDeviceChange: (device: string | null) => void;
+  selectedDevices: string[];
+  onDeviceChange: (devices: string[]) => void;
   availableFrequencies: number[];
-  selectedFreq: number | null;
-  onFrequencyChange: (frequency: number | null) => void;
+  selectedFrequencies: number[];
+  onFrequencyChange: (frequencies: number[]) => void;
   availableRates: string[];
-  selectedRate: string | null;
-  onRateChange: (rate: string | null) => void;
+  selectedRates: string[];
+  onRateChange: (rates: string[]) => void;
   activeView: MainView;
   onViewChange: (view: MainView) => void;
   onHeatmapCellSelect: (frequency: number | null, device: string | null) => void;
@@ -41,13 +41,13 @@ const MainContent: React.FC<MainContentProps> = ({
   lineWidth,
   rfMappings,
   deviceOptions,
-  selectedDevice,
+  selectedDevices,
   onDeviceChange,
   availableFrequencies,
-  selectedFreq,
+  selectedFrequencies,
   onFrequencyChange,
   availableRates,
-  selectedRate,
+  selectedRates,
   onRateChange,
   activeView,
   onViewChange,
@@ -61,13 +61,13 @@ const MainContent: React.FC<MainContentProps> = ({
       {currentSheet && currentSheet.indicators.length > 0 && (
         <RfFilterBar
           deviceOptions={deviceOptions}
-          selectedDevice={selectedDevice}
+          selectedDevices={selectedDevices}
           onDeviceChange={onDeviceChange}
           availableFrequencies={availableFrequencies}
-          selectedFreq={selectedFreq}
+          selectedFrequencies={selectedFrequencies}
           onFrequencyChange={onFrequencyChange}
           availableRates={availableRates}
-          selectedRate={selectedRate}
+          selectedRates={selectedRates}
           onRateChange={onRateChange}
           activeView={activeView}
           onViewChange={onViewChange}
