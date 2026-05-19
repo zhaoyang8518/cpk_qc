@@ -3,10 +3,17 @@ name: Release Tauri App
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASE_OWNER: zhaoyang8518
+  RELEASE_REPO: tools-releases
+  RELEASE_TAG: cpk-qc-latest
+  RELEASE_NAME: CPK Quality Control Latest
 
 jobs:
   build-windows:
@@ -16,15 +23,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Remove China-specific Cargo mirror config
+        shell: bash
+        run: rm -f .cargo/config.toml
+
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: latest
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: "22"
+          cache: pnpm
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -34,17 +46,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Tauri App (Windows)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build, sign, and upload Windows release assets
+        uses: tauri-apps/tauri-action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TOOLS_RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: './src-tauri'
-          tagName: ${{ github.ref_name }}
-          releaseName: 'cpk_qc ${{ github.ref_name }}'
-          releaseBody: '自动化构建发布的跨平台精益六西格玛质量控制分析引擎。'
-          releaseDraft: true
+          projectPath: ./src-tauri
+          owner: ${{ env.RELEASE_OWNER }}
+          repo: ${{ env.RELEASE_REPO }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: ${{ env.RELEASE_NAME }}
+          releaseBody: |
+            Latest OTA release for CPK Quality Control.
+
+            Source tag: ${{ github.ref_name }}
+          releaseCommitish: main
+          releaseDraft: false
           prerelease: false
+          updaterJsonPreferNsis: true
 
   build-macos:
     needs: build-windows
@@ -54,15 +75,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Remove China-specific Cargo mirror config
+        run: rm -f .cargo/config.toml
+
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: latest
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: "22"
+          cache: pnpm
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -70,14 +95,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Tauri App (macOS)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build, sign, and upload macOS release assets
+        uses: tauri-apps/tauri-action@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TOOLS_RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: './src-tauri'
-          tagName: ${{ github.ref_name }}
-          releaseName: 'cpk_qc ${{ github.ref_name }}'
-          releaseBody: '自动化构建发布的跨平台精益六西格玛质量控制分析引擎。'
-          releaseDraft: true
+          projectPath: ./src-tauri
+          owner: ${{ env.RELEASE_OWNER }}
+          repo: ${{ env.RELEASE_REPO }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: ${{ env.RELEASE_NAME }}
+          releaseBody: |
+            Latest OTA release for CPK Quality Control.
+
+            Source tag: ${{ github.ref_name }}
+          releaseCommitish: main
+          releaseDraft: false
           prerelease: false
+          updaterJsonPreferNsis: true

@@ -12,6 +12,8 @@
     "dialog:allow-save",
     "fs:default",
     "fs:allow-write-file",
-    "fs:write-all"
+    "fs:write-all",
+    "process:default",
+    "updater:default"
   ]
 }

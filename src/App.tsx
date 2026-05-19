@@ -2,14 +2,14 @@ import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FileSpreadsheet } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
 import { CpkStatus, SheetData } from "./types";
 import Header from "./components/Header";
 import SheetNav from "./components/SheetNav";
 import PcbaList from "./components/PcbaList";
 import SettingsModal from "./components/SettingsModal";
 import MainContent from "./components/MainContent";
-import ExportProgressModal from "./components/ExportProgressModal";
+import ExportProgressModal, { ExportProgressState } from "./components/ExportProgressModal";
 import { t, Locale, LocaleProvider } from "./i18n";
 import { RfMappingConfig, DEFAULT_RF_MAPPINGS, mergeRfMappingsWithDefaults, parseRFIndicator } from "./utils/rfParser";
 import { getCpkStatus } from "./utils/cpk";
@@ -17,8 +17,10 @@ import { matchesRfDeviceFilter } from "./utils/rfFilters";
 import { useResizableSidebar } from "./hooks/useResizableSidebar";
 import { useRfFilters } from "./hooks/useRfFilters";
 import { usePdfExport } from "./hooks/usePdfExport";
+import { useAutoUpdater } from "./hooks/useAutoUpdater";
 
 const EXCEL_EXTS = [".xlsx", ".xls", ".xlsm", ".xlsb"];
+const EMPTY_PROGRESS: ExportProgressState = { visible: false, percent: 0, text: "" };
 
 const App: React.FC = () => {
   const [locale, setLocale] = useState<Locale>("en");
@@ -38,6 +40,9 @@ const App: React.FC = () => {
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const updateState = useAutoUpdater(locale);
+  const [importProgress, setImportProgress] = useState<ExportProgressState>(EMPTY_PROGRESS);
 
   // RF Custom Mappings State
   const [rfMappings, setRfMappings] = useState<RfMappingConfig>(() => {
@@ -93,16 +98,41 @@ const App: React.FC = () => {
   // ── 核心加载函数（对话框和拖拽共用）──
   const loadFileByPath = useCallback(async (filePath: string) => {
     setLoading(true);
+    let timer: ReturnType<typeof setInterval> | undefined;
     try {
+      setImportProgress({ visible: true, percent: 8, text: t("importProgressPreparing", locale) });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      timer = setInterval(() => {
+        setImportProgress((prev) => {
+          if (!prev.visible || prev.percent >= 85) return prev;
+          return {
+            visible: true,
+            percent: Math.min(prev.percent + 7, 85),
+            text: t("importProgressParsing", locale),
+          };
+        });
+      }, 220);
+
       const res: SheetData[] = await invoke("parse_excel", { path: filePath });
+      if (timer) clearInterval(timer);
+      setImportProgress({ visible: true, percent: 92, text: t("importProgressRendering", locale) });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
       setSheets(res);
       setActiveSheetIdx(0);
       setSelectedIndicatorIdx(null);
       resetRfView();
       setDisplayFileName(filePath.split(/[/\\]/).pop() || filePath);
+
+      setImportProgress({ visible: true, percent: 100, text: t("importProgressDone", locale) });
+      await new Promise((resolve) => setTimeout(resolve, 250));
     } catch (err: any) {
+      if (timer) clearInterval(timer);
       alert(`${t("importFailed", locale)}${err}`);
     } finally {
+      if (timer) clearInterval(timer);
+      setImportProgress(EMPTY_PROGRESS);
       setLoading(false);
     }
   }, [locale, resetRfView]);
@@ -120,7 +150,7 @@ const App: React.FC = () => {
   useEffect(() => {
     let unlistenEnter: (() => void) | undefined;
     let unlistenLeave: (() => void) | undefined;
-    let unlistenDrop:  (() => void) | undefined;
+    let unlistenDrop: (() => void) | undefined;
 
     const setup = async () => {
       unlistenEnter = await listen("tauri://drag-enter", () => {
@@ -220,37 +250,70 @@ const App: React.FC = () => {
           onGridChange={setGridCols}
           onExport={handleExport}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          updateState={{
+            available: updateState.available,
+            checking: updateState.checking,
+            downloading: updateState.downloading,
+            downloadProgress: updateState.downloadProgress,
+            onCheckUpdate: updateState.checkForUpdate,
+            onInstallUpdate: () => updateState.update ? updateState.installUpdate(updateState.update) : undefined,
+          }}
         />
 
         <div className="flex flex-1 overflow-hidden relative">
-          <PcbaList
-            indicators={currentSheet?.indicators || []}
-            visibleIndicators={visibleIndicators}
-            selectedIndicatorIdx={selectedIndicatorIdx}
-            onSelectIndicator={setSelectedIndicatorIdx}
-            searchQuery={indicatorSearchQuery}
-            onSearchChange={setIndicatorSearchQuery}
-            enabledStatuses={enabledCpkStatuses}
-            statusCounts={cpkStatusCounts}
-            onToggleStatus={(status) => {
-              setEnabledCpkStatuses((prev) => {
-                const next = new Set(prev);
-                if (next.has(status)) {
-                  next.delete(status);
-                } else {
-                  next.add(status);
-                }
-                return next;
-              });
-            }}
-            width={sidebarWidth}
-            rfMappings={rfMappings}
-          />
+          {isSidebarCollapsed ? (
+            <div className="flex h-full w-6 shrink-0 items-start justify-center border-r border-slate-700/50 bg-slate-900/80 pt-4">
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="flex h-8 w-3 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-400 transition-colors hover:border-blue-500/70 hover:text-blue-300"
+                title="Show indicator list"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <PcbaList
+                indicators={currentSheet?.indicators || []}
+                visibleIndicators={visibleIndicators}
+                selectedIndicatorIdx={selectedIndicatorIdx}
+                onSelectIndicator={setSelectedIndicatorIdx}
+                searchQuery={indicatorSearchQuery}
+                onSearchChange={setIndicatorSearchQuery}
+                enabledStatuses={enabledCpkStatuses}
+                statusCounts={cpkStatusCounts}
+                onToggleStatus={(status) => {
+                  setEnabledCpkStatuses((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(status)) {
+                      next.delete(status);
+                    } else {
+                      next.add(status);
+                    }
+                    return next;
+                  });
+                }}
+                width={sidebarWidth}
+                rfMappings={rfMappings}
+              />
 
-          <div
-            onMouseDown={startResizing}
-            className="w-1 bg-slate-800 hover:bg-blue-500/80 active:bg-blue-600 cursor-col-resize transition-colors h-full z-20 relative shrink-0 border-l border-slate-700/30 border-r border-slate-700/30"
-          />
+              <div
+                onMouseDown={startResizing}
+                className="group relative h-full w-1 shrink-0 cursor-col-resize border-l border-slate-700/30 border-r border-slate-700/30 bg-slate-800 transition-colors hover:bg-blue-500/80 active:bg-blue-600"
+              >
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => setIsSidebarCollapsed(true)}
+                  className="absolute left-1/2 top-4 flex h-8 w-6 -translate-x-1/2 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-400 shadow-lg transition-colors hover:border-blue-500/70 hover:text-blue-300"
+                  title="Hide indicator list"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              </div>
+            </>
+          )}
 
           <MainContent
             currentSheet={currentSheet}
@@ -300,6 +363,11 @@ const App: React.FC = () => {
           onResetRfMappings={handleRfMappingsReset}
         />
 
+        <ExportProgressModal
+          progress={importProgress}
+          title={t("importProgressTitle", locale)}
+          description={t("importProgressDesc", locale)}
+        />
         <ExportProgressModal progress={exportProgress} />
       </div>
     </LocaleProvider>

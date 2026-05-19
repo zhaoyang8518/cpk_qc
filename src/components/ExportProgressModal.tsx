@@ -10,9 +10,11 @@ export interface ExportProgressState {
 
 interface ExportProgressModalProps {
   progress: ExportProgressState;
+  title?: string;
+  description?: string;
 }
 
-const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress }) => {
+const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress, title, description }) => {
   const { locale } = useLocale();
 
   if (!progress.visible) return null;
@@ -25,8 +27,8 @@ const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress }) =
             <FileSpreadsheet className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h3 className="text-slate-200 font-bold text-sm">{t("generatingReport", locale)}</h3>
-            <p className="text-xs text-slate-400">{t("generatingReportDesc", locale)}</p>
+            <h3 className="text-slate-200 font-bold text-sm">{title || t("generatingReport", locale)}</h3>
+            <p className="text-xs text-slate-400">{description || t("generatingReportDesc", locale)}</p>
           </div>
         </div>
 

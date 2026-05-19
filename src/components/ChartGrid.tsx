@@ -85,7 +85,15 @@ const ChartGrid: React.FC<ChartGridProps> = ({
 
   // 避免 Tailwind JIT 动态拼接失效，采用显式静态类名映射
   const gridColsClass =
-    gridCols === 1 ? "grid-cols-1" : gridCols === 2 ? "grid-cols-2" : gridCols === 3 ? "grid-cols-3" : "grid-cols-2";
+    gridCols === 1
+      ? "grid-cols-1"
+      : gridCols === 2
+        ? "grid-cols-2"
+        : gridCols === 3
+          ? "grid-cols-3"
+          : gridCols === 4
+            ? "grid-cols-4"
+            : "grid-cols-2";
 
   return (
     <div className={`grid ${gridColsClass} gap-6 pb-12 relative`}>
@@ -134,11 +142,11 @@ const ChartGrid: React.FC<ChartGridProps> = ({
         }
 
         return (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in"
             onClick={() => setActiveDiagIdx(null)}
           >
-            <div 
+            <div
               className="bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-in cursor-default"
               onClick={(e) => e.stopPropagation()}
             >
@@ -229,11 +237,10 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                   <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center space-x-2">
                     <span>{t("diagAction", locale)}</span>
                   </h3>
-                  <div className={`p-4 rounded-xl border leading-relaxed ${
-                    diagType === "perfect" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200" :
+                  <div className={`p-4 rounded-xl border leading-relaxed ${diagType === "perfect" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200" :
                     diagType === "offset" ? "bg-amber-500/10 border-amber-500/30 text-amber-200" :
-                    "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                  }`}>
+                      "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                    }`}>
                     <div className="font-bold mb-1 flex items-center space-x-2">
                       {diagType === "perfect" ? <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
                       <span>{t("actionTriggerTitle", locale)}</span>
@@ -290,11 +297,10 @@ const ChartGrid: React.FC<ChartGridProps> = ({
             id={`indicator-card-${idx}`}
             onClick={() => onSelectIndicator(idx)}
             style={{ borderColor: statusColor }}
-            className={`bg-slate-800/60 rounded-xl p-5 flex flex-col space-y-4 cursor-pointer select-none relative overflow-hidden transition-all duration-300 ${
-              isSelected
-                ? "border-4 shadow-2xl scale-[1.02] shadow-slate-700/50 z-10"
-                : "border-2 shadow-xl hover:shadow-2xl hover:scale-[1.01] opacity-90 hover:opacity-100"
-            }`}
+            className={`bg-slate-800/60 rounded-xl p-5 flex flex-col space-y-4 cursor-pointer select-none relative overflow-hidden transition-all duration-300 ${isSelected
+              ? "border-4 shadow-2xl scale-[1.02] shadow-slate-700/50 z-10"
+              : "border-2 shadow-xl hover:shadow-2xl hover:scale-[1.01] opacity-90 hover:opacity-100"
+              }`}
           >
             {/* Card Header */}
             <div className="flex items-center justify-between border-b border-slate-700/50 pb-2">
@@ -406,7 +412,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                 </div>
               </div>
               <div className="bg-slate-900/40 p-1.5 rounded border border-slate-800/80 shadow-inner">
-                <div className="text-[10px] text-slate-500">{t("cp", locale)}</div>
+                <div className="text-[8px] text-slate-500">{t("cp", locale)}</div>
                 <div
                   className={`truncate font-bold ${cpAlert ? "text-rose-400 animate-pulse" : "text-slate-200"}`}
                   title={cp?.toString()}
@@ -425,11 +431,10 @@ const ChartGrid: React.FC<ChartGridProps> = ({
             {/* 六西格玛 Action Trigger 诊断栏 */}
             {actionTrigger && (
               <div
-                className={`flex items-start space-x-2 p-2.5 rounded-lg border text-xs leading-relaxed ${
-                  cpAlert || (cpk !== null && cpk < 1.0)
-                    ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                    : "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                }`}
+                className={`flex items-start space-x-2 p-2.5 rounded-lg border text-xs leading-relaxed ${cpAlert || (cpk !== null && cpk < 1.0)
+                  ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                  : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                  }`}
               >
                 {cpAlert || (cpk !== null && cpk < 1.0) ? (
                   <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />

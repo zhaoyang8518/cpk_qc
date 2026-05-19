@@ -1,6 +1,17 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { FileSpreadsheet, Settings, Download, LayoutGrid, Loader2 } from "lucide-react";
 import { t, useLocale } from "../i18n";
+import { APP_ABBR, APP_NAME, APP_VERSION } from "../appMeta";
+
+interface UpdateState {
+  available: boolean;
+  checking: boolean;
+  downloading: boolean;
+  downloadProgress: number;
+  onCheckUpdate: (showPrompt: boolean) => void;
+  onInstallUpdate: () => void;
+}
 
 interface HeaderProps {
   fileName: string;
@@ -10,6 +21,7 @@ interface HeaderProps {
   onGridChange: (cols: number) => void;
   onExport: () => void;
   onOpenSettings: () => void;
+  updateState: UpdateState;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -20,27 +32,57 @@ const Header: React.FC<HeaderProps> = ({
   onGridChange,
   onExport,
   onOpenSettings,
+  updateState,
 }) => {
   const { locale } = useLocale();
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion(APP_VERSION));
+  }, []);
+
+  const handleVersionClick = () => {
+    if (updateState.available) {
+      updateState.onInstallUpdate();
+    } else {
+      updateState.onCheckUpdate(true);
+    }
+  };
+
   const gridOptions = [
     { cols: 1, label: t("singleCol", locale), title: t("colTitle1", locale) },
     { cols: 2, label: t("doubleCol", locale), title: t("colTitle2", locale) },
     { cols: 3, label: t("tripleCol", locale), title: t("colTitle3", locale) },
+    { cols: 4, label: t("quadCol", locale), title: t("colTitle4", locale) },
   ];
 
   return (
     <header className="flex items-center justify-between px-6 py-3 bg-slate-800/80 backdrop-blur border-b border-slate-700/50 shadow-md z-20 select-none">
-      {/* Left Logo & File Info */}
       <div className="flex items-center space-x-3">
         <div className="p-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30 shadow-inner">
           <FileSpreadsheet className="w-6 h-6" />
         </div>
         <div>
           <div className="flex items-center space-x-2">
-            <h1 className="text-base font-bold tracking-wider text-slate-100">CPK<span className="text-blue-400">·QC</span></h1>
-            <span className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-mono">
-              v0.1.0
-            </span>
+            <h1 className="text-base font-bold tracking-wider text-slate-100" title={APP_NAME}>
+              {APP_ABBR}
+            </h1>
+            <button
+              onClick={handleVersionClick}
+              disabled={updateState.checking || updateState.downloading}
+              className="relative text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-mono hover:bg-blue-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title={updateState.downloading ? t("updateDownloading", locale).replace("{percent}", String(updateState.downloadProgress)) : updateState.available ? t("updateClickToInstall", locale) : t("updateClickToCheck", locale)}
+            >
+              v{appVersion}
+              {updateState.available && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-800 animate-pulse" />
+              )}
+              {(updateState.checking || updateState.downloading) && (
+                <Loader2 className="absolute -top-1 -right-1 w-2.5 h-2.5 text-blue-400 animate-spin" />
+              )}
+            </button>
           </div>
           <p className="text-xs text-slate-400 truncate max-w-md mt-0.5" title={fileName}>
             {fileName || <span className="text-slate-600 italic">{t("noFile", locale)}</span>}
@@ -48,9 +90,7 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right Actions */}
       <div className="flex items-center space-x-4">
-        {/* Import Button */}
         <button
           onClick={onImport}
           disabled={loading}
@@ -60,7 +100,6 @@ const Header: React.FC<HeaderProps> = ({
           <span className="text-sm">{loading ? t("importing", locale) : t("importExcel", locale)}</span>
         </button>
 
-        {/* Grid Columns Switcher */}
         <div className="flex items-center bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 shadow-inner space-x-1">
           {gridOptions.map((option) => (
             <button
@@ -76,7 +115,6 @@ const Header: React.FC<HeaderProps> = ({
           ))}
         </div>
 
-        {/* Auxiliary Actions (Export & Settings) */}
         <div className="flex items-center space-x-2 border-l border-slate-700/60 pl-4">
           <button
             onClick={onExport}

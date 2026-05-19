@@ -13,6 +13,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init()) // 必须显式注册 dialog 插件，否则前端 open() 无反应
         .plugin(tauri_plugin_fs::init())     // 显式注册 fs 插件
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![parse_excel])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,6 +5,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as echarts from "echarts";
+import { APP_NAME, APP_VERSION } from "../appMeta";
 import { ExportProgressState } from "../components/ExportProgressModal";
 import { Locale, t } from "../i18n";
 import { CpkStatus, SheetData } from "../types";
@@ -84,7 +85,7 @@ export const usePdfExport = ({
       y += 6;
       pdf.setFontSize(10);
       pdf.setTextColor(100, 115, 130);
-      pdf.text(t("reportSubtitle", locale), margin, y);
+      pdf.text(`${APP_NAME} v${APP_VERSION}  |  ${t("reportSubtitle", locale)}`, margin, y);
 
       y += 12;
       pdf.setFontSize(14);
