@@ -37,13 +37,13 @@ const Header: React.FC<HeaderProps> = ({
         </div>
         <div>
           <div className="flex items-center space-x-2">
-            <h1 className="text-base font-bold tracking-wider text-slate-100">CQC</h1>
+            <h1 className="text-base font-bold tracking-wider text-slate-100">CPK<span className="text-blue-400">·QC</span></h1>
             <span className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded font-mono">
               v0.1.0
             </span>
           </div>
           <p className="text-xs text-slate-400 truncate max-w-md mt-0.5" title={fileName}>
-            {fileName}
+            {fileName || <span className="text-slate-600 italic">{t("noFile", locale)}</span>}
           </p>
         </div>
       </div>

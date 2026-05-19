@@ -32,6 +32,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
   const { locale } = useLocale();
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: "" });
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  // activeDiagIdx stores the ABSOLUTE indicator index (from indicators[]), not visibleList relative index
   const [activeDiagIdx, setActiveDiagIdx] = useState<number | null>(null);
 
   // 监听选中检测项变化，实现右侧自动平滑滚动并垂直居中
@@ -98,7 +99,8 @@ const ChartGrid: React.FC<ChartGridProps> = ({
 
       {/* 权威专家诊断报告模态框 (Modal) */}
       {activeDiagIdx !== null && (() => {
-        const ind = visibleList[activeDiagIdx].ind;
+        const ind = indicators[activeDiagIdx];
+        if (!ind) return null;
         const spcRes = calculateSpc(ind, pcbasnList, locale);
         const { cp, cpk, sigmaLevel, status, statusColor } = spcRes;
 
@@ -342,12 +344,12 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                     {cpk !== null ? cpk.toFixed(2) : "N/A"}
                   </span>
                 </div>
-                {/* 增加权威专家诊断弹窗按钮 */}
+                {/* 权威专家诊断弹窗按钮：传入绝对索引 idx */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setActiveDiagIdx(idx);
+                    setActiveDiagIdx(idx); // idx is absolute index from indicators[]
                   }}
                   title={t("viewDiagReport", locale)}
                   className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:text-blue-300 transition-all flex-shrink-0 hover:scale-105 active:scale-95 shadow-lg"
@@ -373,8 +375,12 @@ const ChartGrid: React.FC<ChartGridProps> = ({
               )}
             </div>
 
-            {/* Statistical Parameters Footer (6 Columns) */}
-            <div className="grid grid-cols-6 gap-1.5 text-center text-xs font-mono border-t border-slate-700/40 pt-3">
+            {/* Statistical Parameters Footer (7 Columns: N + mean + stdev + USL + LSL + Cp + Sigma) */}
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-mono border-t border-slate-700/40 pt-3">
+              <div className="bg-slate-900/40 p-1.5 rounded border border-slate-800/80 shadow-inner">
+                <div className="text-[10px] text-slate-500">N</div>
+                <div className="text-blue-300 truncate font-bold">{ind.values?.length ?? 0}</div>
+              </div>
               <div className="bg-slate-900/40 p-1.5 rounded border border-slate-800/80 shadow-inner">
                 <div className="text-[10px] text-slate-500">{t("mean", locale)}</div>
                 <div className="text-slate-200 truncate font-bold" title={ind.average?.toString()}>

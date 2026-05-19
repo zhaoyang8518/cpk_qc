@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
+import { Activity } from "lucide-react";
 import { IndicatorSummary } from "../types";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
 import { t, useLocale } from "../i18n";
@@ -234,6 +235,24 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       onSelectCell(freq, deviceVal);
     }
   };
+
+  // Empty state: no RF-identifiable indicators found
+  if (groupedData.frequencies.length === 0) {
+    return (
+      <div className="w-full h-full bg-slate-900/60 p-4 border border-slate-800 rounded-2xl flex flex-col items-center justify-center space-y-4 text-slate-500">
+        <div className="p-5 bg-slate-800/40 rounded-full border border-slate-700/30">
+          <Activity className="w-12 h-12 text-slate-600" />
+        </div>
+        <div className="text-center space-y-1 max-w-xs">
+          <h3 className="text-sm font-bold text-slate-400">No RF Indicators Found</h3>
+          <p className="text-xs leading-relaxed">
+            The current sheet contains no indicators with recognizable RF frequencies (2.4GHz / 5GHz / 6GHz).
+            This view is designed for Wi-Fi and BLE test data.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full bg-slate-900/60 p-4 border border-slate-800 rounded-2xl relative shadow-inner flex flex-col justify-between">
