@@ -146,7 +146,7 @@ const App: React.FC = () => {
     };
   }, [loadFileByPath]);
 
-  const visibleIndicators = useMemo(() => {
+  const rfFilteredIndicators = useMemo(() => {
     const indicators = currentSheet?.indicators || [];
     const query = indicatorSearchQuery.trim().toLowerCase();
 
@@ -160,26 +160,30 @@ const App: React.FC = () => {
           indicator.name.toLowerCase().includes(query) ||
           parsed.displayName.toLowerCase().includes(query);
 
-        const matchesStatus = enabledCpkStatuses.has(getCpkStatus(indicator.cpk));
         const matchesDevice = matchesRfDeviceFilter(parsed, selectedDevices);
         const matchesFreq =
           selectedFrequencies.length === 0 ||
           (parsed.frequency !== null && selectedFrequencies.includes(parsed.frequency));
         const matchesRate = selectedRates.length === 0 || selectedRates.includes(parsed.rate);
 
-        return matchesSearch && matchesStatus && matchesDevice && matchesFreq && matchesRate;
+        return matchesSearch && matchesDevice && matchesFreq && matchesRate;
       });
-  }, [currentSheet?.indicators, indicatorSearchQuery, enabledCpkStatuses, selectedDevices, selectedFrequencies, selectedRates, rfMappings]);
+  }, [currentSheet?.indicators, indicatorSearchQuery, selectedDevices, selectedFrequencies, selectedRates, rfMappings]);
+
+  const visibleIndicators = useMemo(
+    () => rfFilteredIndicators.filter(({ indicator }) => enabledCpkStatuses.has(getCpkStatus(indicator.cpk))),
+    [rfFilteredIndicators, enabledCpkStatuses]
+  );
 
   const visibleIndicatorIndexes = useMemo(() => new Set(visibleIndicators.map(({ index }) => index)), [visibleIndicators]);
 
   const cpkStatusCounts = useMemo(() => {
     const counts: Record<CpkStatus, number> = { red: 0, yellow: 0, green: 0, cyan: 0 };
-    (currentSheet?.indicators || []).forEach((indicator) => {
+    rfFilteredIndicators.forEach(({ indicator }) => {
       counts[getCpkStatus(indicator.cpk)] += 1;
     });
     return counts;
-  }, [currentSheet?.indicators]);
+  }, [rfFilteredIndicators]);
 
   return (
     <LocaleProvider value={{ locale, setLocale }}>
