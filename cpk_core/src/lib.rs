@@ -50,13 +50,7 @@ fn get_string(cell: &Data) -> Option<String> {
     }
 }
 
-fn find_cell_text(row: &[Data], text: &str) -> Option<usize> {
-    row.iter().position(|cell| {
-        get_string(cell)
-            .map(|value| value.eq_ignore_ascii_case(text))
-            .unwrap_or(false)
-    })
-}
+
 
 fn find_param_key(row: &[Data]) -> Option<String> {
     row.iter().take(4).find_map(|cell| {
@@ -122,9 +116,14 @@ pub fn parse_excel_file(path: &str) -> Result<Vec<SheetData>, String> {
                     continue;
                 }
 
-                if let Some(col_idx) = find_cell_text(row, "PCBASN") {
+                // Check if the first cell is "Uid" (case-insensitive) to identify the header row
+                let is_header = get_string(&row[0])
+                    .map(|val| val.eq_ignore_ascii_case("Uid"))
+                    .unwrap_or(false);
+
+                if is_header {
                     header_row = Some(row.to_vec());
-                    pcbasn_col_idx = Some(col_idx);
+                    pcbasn_col_idx = Some(1); // Fixed column index for the serial number (second column)
                     data_start_idx = idx + 1;
                     break;
                 }

@@ -14,6 +14,7 @@ interface PcbaListProps {
   enabledStatuses: Set<CpkStatus>;
   statusCounts: Record<CpkStatus, number>;
   onToggleStatus: (status: CpkStatus) => void;
+  width?: number;
 }
 
 const ITEM_HEIGHT = 44; // 固定行高
@@ -39,6 +40,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
   enabledStatuses,
   statusCounts,
   onToggleStatus,
+  width,
 }) => {
   const { locale } = useLocale();
   const [scrollTop, setScrollTop] = useState<number>(0);
@@ -95,7 +97,10 @@ const PcbaList: React.FC<PcbaListProps> = ({
   }, [visibleIndicators, startIndex, endIndex]);
 
   return (
-    <aside className="w-68 bg-slate-800/40 border-r border-slate-700/50 flex flex-col h-full overflow-hidden select-none">
+    <aside
+      style={{ width: width ? `${width}px` : "272px" }}
+      className="bg-slate-800/40 flex flex-col h-full overflow-hidden select-none shrink-0"
+    >
       {/* Sidebar Header & Search */}
       <div className="p-4 border-b border-slate-700/50 bg-slate-800/20">
         <div className="flex items-center justify-between mb-3">

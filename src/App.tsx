@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { writeFile } from "@tauri-apps/plugin-fs";
@@ -46,6 +46,31 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
+
+  const [sidebarWidth, setSidebarWidth] = useState<number>(272);
+  const isResizing = useRef(false);
+
+  const startResizing = (mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    isResizing.current = true;
+
+    const handleMouseMove = (mouseMoveEvent: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = mouseMoveEvent.clientX;
+      if (newWidth >= 200 && newWidth <= 600) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   const currentSheet = useMemo(() => sheets[activeSheetIdx] || null, [sheets, activeSheetIdx]);
 
@@ -349,6 +374,13 @@ const App: React.FC = () => {
                 return next;
               });
             }}
+            width={sidebarWidth}
+          />
+
+          {/* 可拖拽改变宽度的分隔线 */}
+          <div
+            onMouseDown={startResizing}
+            className="w-1 bg-slate-800 hover:bg-blue-500/80 active:bg-blue-600 cursor-col-resize transition-colors h-full z-20 relative shrink-0 border-l border-slate-700/30 border-r border-slate-700/30"
           />
 
           {/* 右侧统计图表矩阵 */}
