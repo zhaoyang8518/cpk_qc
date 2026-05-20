@@ -1,12 +1,12 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use cpk_core::{parse_excel_file, SheetData};
 use cpk_storage::Storage;
-use chrono::{DateTime, Utc, NaiveDate, NaiveDateTime};
+use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
-use sha2::{Sha256, Digest};
 use tauri::Emitter;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -43,21 +43,27 @@ async fn test_db_connection(postgres_uri: String) -> Result<String, String> {
 #[tauri::command]
 async fn get_excel_metadata(path: String) -> Result<String, String> {
     let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
-    
+
     // Try to get creation time, fallback to modified time
-    let time = metadata.created().or_else(|_| metadata.modified()).map_err(|e| e.to_string())?;
-    
+    let time = metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .map_err(|e| e.to_string())?;
+
     let datetime: chrono::DateTime<chrono::Local> = time.into();
     // Return full ISO 8601 date-time string so we don't lose time precision
     Ok(datetime.to_rfc3339())
 }
 
 fn calculate_file_hash(path: &str) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open file for hashing: {}", e))?;
+    let mut file =
+        File::open(path).map_err(|e| format!("Failed to open file for hashing: {}", e))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0; 1024 * 1024]; // 1MB buffer
     loop {
-        let count = file.read(&mut buffer).map_err(|e| format!("Failed to read file: {}", e))?;
+        let count = file
+            .read(&mut buffer)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
         if count == 0 {
             break;
         }
@@ -95,6 +101,8 @@ async fn save_to_db(
     state: tauri::State<'_, DbImportState>,
     file_path: String,
     test_date: String,
+    supplier_key: String,
+    supplier_name: String,
     sheets: Vec<SheetData>,
     postgres_uri: String,
     force_overwrite: bool,
@@ -102,7 +110,7 @@ async fn save_to_db(
     state.cancel_flag.store(false, Ordering::SeqCst);
     let cancel_flag = state.cancel_flag.clone();
     let storage = Storage::connect(&postgres_uri).await?;
-    
+
     // Initialize schema if not exists
     storage.init_db().await?;
 
@@ -113,21 +121,42 @@ async fn save_to_db(
 
     let file_hash = calculate_file_hash(&file_path)?;
     let parsed_date = parse_date_string(&test_date)?;
+    let test_day = parsed_date.date_naive();
 
-    // If force_overwrite is false, check if hash already exists
-    if !force_overwrite && storage.check_hash_exists(&file_hash).await? {
-        return Err("FILE_ALREADY_IMPORTED".to_string());
+    // Uniqueness is based on supplier + calendar day, not the raw Excel file bytes.
+    if !force_overwrite
+        && storage
+            .check_supplier_day_exists(&supplier_key, test_day)
+            .await?
+    {
+        return Err("SUPPLIER_DAY_ALREADY_IMPORTED".to_string());
     }
 
     let window_clone = window.clone();
     let progress_callback = move |percent: f64, text: &str| {
-        let _ = window_clone.emit("db-import-progress", ProgressPayload {
-            percent,
-            text: text.to_string(),
-        });
+        let _ = window_clone.emit(
+            "db-import-progress",
+            ProgressPayload {
+                percent,
+                text: text.to_string(),
+            },
+        );
     };
 
-    storage.save_import(file_name, &file_hash, parsed_date, &sheets, force_overwrite, cancel_flag, progress_callback).await
+    storage
+        .save_import(
+            file_name,
+            &file_hash,
+            parsed_date,
+            test_day,
+            &supplier_key,
+            &supplier_name,
+            &sheets,
+            force_overwrite,
+            cancel_flag,
+            progress_callback,
+        )
+        .await
 }
 
 fn main() {

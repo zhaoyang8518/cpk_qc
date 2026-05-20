@@ -15,8 +15,16 @@ export interface IndicatorSummary {
 
 export interface SheetData {
   sheet_name: string;
+  raw_sheet_name: string;
+  test_metric_key: string;
+  display_name: string;
   pcbasn_list: string[];
   indicators: IndicatorSummary[];
+}
+
+export interface Supplier {
+  supplier_key: string;
+  supplier_name: string;
 }
 
 export type CpkStatus = "red" | "yellow" | "green" | "cyan";

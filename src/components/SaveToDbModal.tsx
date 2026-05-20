@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Database, Calendar, X, Save } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { t, useLocale } from "../i18n";
+import { Supplier } from "../types";
 
 interface SaveToDbModalProps {
   isOpen: boolean;
@@ -9,7 +10,8 @@ interface SaveToDbModalProps {
   filePath: string;
   fileName: string;
   postgresUri: string;
-  onSave: (dateStr: string, forceOverwrite: boolean) => Promise<void>;
+  suppliers: Supplier[];
+  onSave: (dateStr: string, supplier: Supplier, forceOverwrite: boolean) => Promise<void>;
 }
 
 const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
@@ -18,6 +20,7 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
   filePath,
   fileName,
   postgresUri,
+  suppliers,
   onSave,
 }) => {
   const { locale } = useLocale();
@@ -25,10 +28,13 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [selectedSupplierKey, setSelectedSupplierKey] = useState("");
 
   useEffect(() => {
     if (isOpen && filePath) {
       setError("");
+      setShowOverwriteConfirm(false);
+      setSelectedSupplierKey((current) => current || suppliers[0]?.supplier_key || "");
       setLoading(true);
       // Fetch metadata from backend
       invoke<string>("get_excel_metadata", { path: filePath })
@@ -53,7 +59,7 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
           setLoading(false);
         });
     }
-  }, [isOpen, filePath]);
+  }, [isOpen, filePath, suppliers]);
 
   if (!isOpen) return null;
 
@@ -62,15 +68,20 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
       setError(t("dbRequireDate", locale));
       return;
     }
+    const supplier = suppliers.find((item) => item.supplier_key === selectedSupplierKey);
+    if (!supplier) {
+      setError(t("dbRequireSupplier", locale));
+      return;
+    }
 
     setLoading(true);
     setError("");
     try {
-      await onSave(testDate, force);
+      await onSave(testDate, supplier, force);
       setShowOverwriteConfirm(false);
       onClose();
     } catch (e: any) {
-      if (String(e) === "FILE_ALREADY_IMPORTED") {
+      if (String(e) === "SUPPLIER_DAY_ALREADY_IMPORTED") {
         setShowOverwriteConfirm(true);
       } else {
         setError(String(e));
@@ -106,6 +117,31 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
                {t("dbConfigMissing", locale)}
              </div>
           )}
+
+          {suppliers.length === 0 && (
+             <div className="text-xs text-amber-400 bg-amber-950/30 p-3 rounded-lg border border-amber-900/50 mt-4">
+               {t("dbSupplierMissing", locale)}
+             </div>
+          )}
+
+          <div className="space-y-2 pt-2">
+            <label className="text-xs font-bold text-slate-300">
+              {t("dbSupplier", locale)}
+            </label>
+            <select
+              value={selectedSupplierKey}
+              onChange={(e) => setSelectedSupplierKey(e.target.value)}
+              disabled={loading || suppliers.length === 0}
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-blue-500 transition-colors text-slate-300 disabled:opacity-50"
+            >
+              <option value="">{t("dbSelectSupplier", locale)}</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.supplier_key} value={supplier.supplier_key}>
+                  {supplier.supplier_name} ({supplier.supplier_key})
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="space-y-2 pt-2">
             <label className="text-xs font-bold text-slate-300 flex items-center space-x-1">
@@ -157,7 +193,7 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
           ) : (
             <button
               onClick={() => handleSave(false)}
-              disabled={loading || !postgresUri}
+              disabled={loading || !postgresUri || suppliers.length === 0}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 border border-blue-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
               <Save className="w-4 h-4" />

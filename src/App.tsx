@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Store } from "@tauri-apps/plugin-store";
 import { ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
-import { CpkStatus, SheetData } from "./types";
+import { CpkStatus, SheetData, Supplier } from "./types";
 import Header from "./components/Header";
 import SheetNav from "./components/SheetNav";
 import PcbaList from "./components/PcbaList";
@@ -48,6 +48,7 @@ const App: React.FC = () => {
   const updateState = useAutoUpdater(locale);
   const [importProgress, setImportProgress] = useState<ExportProgressState>(EMPTY_PROGRESS);
   const [postgresUri, setPostgresUri] = useState<string>("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [store, setStore] = useState<Store | null>(null);
 
   useEffect(() => {
@@ -56,6 +57,10 @@ const App: React.FC = () => {
       setStore(s);
       const uri = await s.get<string>("postgres_uri");
       if (uri) setPostgresUri(uri);
+      const savedSuppliers = await s.get<Supplier[]>("suppliers");
+      if (savedSuppliers && Array.isArray(savedSuppliers)) {
+        setSuppliers(savedSuppliers);
+      }
     }
     initStore();
   }, []);
@@ -163,7 +168,7 @@ const App: React.FC = () => {
     if (selectedPath) await loadFileByPath(selectedPath);
   };
 
-  const handleSaveToDb = async (dateStr: string, forceOverwrite: boolean) => {
+  const handleSaveToDb = async (dateStr: string, supplier: Supplier, forceOverwrite: boolean) => {
     setImportProgress({
       visible: true,
       percent: 0,
@@ -176,6 +181,8 @@ const App: React.FC = () => {
       const res = await invoke("save_to_db", {
         filePath: fullFilePath,
         testDate: dateStr,
+        supplierKey: supplier.supplier_key,
+        supplierName: supplier.supplier_name,
         sheets,
         postgresUri,
         forceOverwrite,
@@ -460,6 +467,14 @@ const App: React.FC = () => {
               await store.save();
             }
           }}
+          suppliers={suppliers}
+          onChangeSuppliers={async (nextSuppliers) => {
+            setSuppliers(nextSuppliers);
+            if (store) {
+              await store.set("suppliers", nextSuppliers);
+              await store.save();
+            }
+          }}
         />
 
         <SaveToDbModal
@@ -468,6 +483,7 @@ const App: React.FC = () => {
           filePath={fullFilePath}
           fileName={displayFileName}
           postgresUri={postgresUri}
+          suppliers={suppliers}
           onSave={handleSaveToDb}
         />
 

@@ -1,15 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
+  Building2,
   Database,
   Layers,
   Palette,
+  Plus,
   Settings,
   Sliders,
+  Trash2,
   X,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Locale, t, useLocale } from "../i18n";
+import { Supplier } from "../types";
 import { DEFAULT_RF_MAPPINGS, RfMappingConfig } from "../utils/rfParser";
 
 interface SettingsModalProps {
@@ -24,6 +28,8 @@ interface SettingsModalProps {
   onResetRfMappings: () => void;
   postgresUri: string;
   onChangePostgresUri: (uri: string) => void;
+  suppliers: Supplier[];
+  onChangeSuppliers: (suppliers: Supplier[]) => void;
 }
 
 const THEMES = [
@@ -46,10 +52,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetRfMappings,
   postgresUri,
   onChangePostgresUri,
+  suppliers,
+  onChangeSuppliers,
 }) => {
   const { locale, setLocale } = useLocale();
   const [activeTab, setActiveTab] = useState<
-    "general" | "rfMapping" | "database"
+    "general" | "rfMapping" | "database" | "suppliers"
   >("general");
   const [dbStatus, setDbStatus] = useState<
     "idle" | "testing" | "success" | "error"
@@ -61,6 +69,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [dbUser, setDbUser] = useState("postgres");
   const [dbPassword, setDbPassword] = useState("");
   const [dbName, setDbName] = useState("cpk_db");
+  const [supplierDrafts, setSupplierDrafts] = useState<Supplier[]>([]);
 
   const parsePgUri = (uri: string) => {
     const defaults = {
@@ -121,6 +130,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
       setDbStatus("idle");
       setDbError("");
+      setSupplierDrafts(suppliers.length > 0 ? suppliers : [{ supplier_key: "", supplier_name: "" }]);
 
       if (rfMappings) {
         setBleAliases(rfMappings.protocols.BLE.join(", "));
@@ -132,7 +142,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setRsiAliases(rfMappings.parameters.RSI.join(", "));
       }
     }
-  }, [isOpen, rfMappings, postgresUri]);
+  }, [isOpen, rfMappings, postgresUri, suppliers]);
 
   if (!isOpen) return null;
 
@@ -159,7 +169,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
     onChangeRfMappings(newMappings);
     onChangePostgresUri(getAssembledUri());
+    const normalizedSuppliers = supplierDrafts
+      .map((supplier) => ({
+        supplier_key: supplier.supplier_key.trim(),
+        supplier_name: supplier.supplier_name.trim(),
+      }))
+      .filter((supplier) => supplier.supplier_key && supplier.supplier_name);
+    const dedupedSuppliers = Array.from(
+      new Map(normalizedSuppliers.map((supplier) => [supplier.supplier_key, supplier])).values(),
+    );
+    onChangeSuppliers(dedupedSuppliers);
     onClose();
+  };
+
+  const updateSupplierDraft = (index: number, field: keyof Supplier, value: string) => {
+    setSupplierDrafts((current) =>
+      current.map((supplier, idx) => (idx === index ? { ...supplier, [field]: value } : supplier)),
+    );
+  };
+
+  const addSupplierDraft = () => {
+    setSupplierDrafts((current) => [...current, { supplier_key: "", supplier_name: "" }]);
+  };
+
+  const removeSupplierDraft = (index: number) => {
+    setSupplierDrafts((current) => current.filter((_, idx) => idx !== index));
   };
 
   const handleReset = () => {
@@ -242,6 +276,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Database className="w-3.5 h-3.5" />
             <span>PostgreSQL</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("suppliers")}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center space-x-1.5 ${
+              activeTab === "suppliers"
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>{t("tabSuppliers", locale)}</span>
           </button>
         </div>
 
@@ -481,7 +527,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+          ) : activeTab === "database" ? (
             <div className="space-y-4">
               <div className="grid grid-cols-6 gap-4 pt-2">
                 <div className="col-span-4 flex flex-col space-y-1.5">
@@ -583,6 +629,59 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   {t("dbTestError", locale)}{dbError}
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-400 leading-relaxed bg-slate-950/30 p-3 rounded-lg border border-slate-800">
+                {t("supplierDesc", locale)}
+              </p>
+
+              <div className="space-y-3">
+                {supplierDrafts.map((supplier, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                    <div className="col-span-5 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("supplierKey", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={supplier.supplier_key}
+                        onChange={(e) => updateSupplierDraft(index, "supplier_key", e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder="vendor_a"
+                      />
+                    </div>
+                    <div className="col-span-6 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("supplierName", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={supplier.supplier_name}
+                        onChange={(e) => updateSupplierDraft(index, "supplier_name", e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors text-slate-300"
+                        placeholder={t("supplierNamePlaceholder", locale)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeSupplierDraft(index)}
+                      className="col-span-1 h-9 flex items-center justify-center rounded-xl border border-slate-700 text-slate-400 hover:text-rose-300 hover:border-rose-500/60 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={addSupplierDraft}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-750 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-medium transition-all shadow-inner flex items-center justify-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{t("supplierAdd", locale)}</span>
+              </button>
             </div>
           )}
         </div>

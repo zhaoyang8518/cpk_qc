@@ -98,7 +98,9 @@ export const usePdfExport = ({
 
       const infoRows = [
         [t("infoFileName", locale), displayFileName || t("noFile", locale)],
-        [t("infoSheetName", locale), sheet.sheet_name],
+        [t("infoTestMetricName", locale), sheet.display_name],
+        [t("infoTestMetricKey", locale), sheet.test_metric_key],
+        [t("infoSourceName", locale), sheet.raw_sheet_name],
         [t("infoTime", locale), ts],
         [t("infoIndCount", locale), String(sheet.indicators.length)],
         [t("infoSampleCount", locale), String(sheet.pcbasn_list.length)],
@@ -234,7 +236,7 @@ export const usePdfExport = ({
       setExportProgress({ visible: true, percent: 92, text: t("exportSaveLoc", locale) });
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const defaultFileName = `CPK_Report_${sheet.sheet_name}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
+      const defaultFileName = `CPK_Report_${sheet.display_name}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
       const savePath = await save({
         defaultPath: defaultFileName,
         filters: [{ name: "PDF Report", extensions: ["pdf"] }],

@@ -21,8 +21,82 @@ pub struct IndicatorSummary {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SheetData {
     pub sheet_name: String,
+    pub raw_sheet_name: String,
+    pub test_metric_key: String,
+    pub display_name: String,
     pub pcbasn_list: Vec<String>,
     pub indicators: Vec<IndicatorSummary>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TestMetricMeta {
+    key: &'static str,
+    display_name: &'static str,
+}
+
+fn resolve_test_metric(raw_sheet_name: &str) -> (String, String) {
+    let meta = match raw_sheet_name.trim() {
+        "CPK summary PWR_Accuracy" => Some(TestMetricMeta {
+            key: "rf_power_accuracy",
+            display_name: "功率精度测试项",
+        }),
+        "CPK summary EVM_Accuracy" => Some(TestMetricMeta {
+            key: "rf_evm_accuracy",
+            display_name: "误差矢量幅度精度测试项",
+        }),
+        "CPK summary MASK_Accuracy" => Some(TestMetricMeta {
+            key: "rf_spectrum_mask_accuracy",
+            display_name: "频谱模板精度测试项",
+        }),
+        "CPK summary Freq_Accuracy" => Some(TestMetricMeta {
+            key: "rf_frequency_accuracy",
+            display_name: "频率精度测试项",
+        }),
+        "CPK summary PER_Accuracy" => Some(TestMetricMeta {
+            key: "rf_packet_error_rate_accuracy",
+            display_name: "包误差率精度测试项",
+        }),
+        "CPK summary RSSI_Accuracy" => Some(TestMetricMeta {
+            key: "rf_rssi_accuracy",
+            display_name: "接收信号强度指示精度测试项",
+        }),
+        _ => None,
+    };
+
+    if let Some(meta) = meta {
+        return (meta.key.to_string(), meta.display_name.to_string());
+    }
+
+    let slug: String = raw_sheet_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("_");
+    let hash = raw_sheet_name
+        .as_bytes()
+        .iter()
+        .fold(0xcbf29ce484222325u64, |acc, byte| {
+            (acc ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        });
+    let fallback = if slug.is_empty() {
+        format!("{hash:016x}")
+    } else {
+        format!("{slug}_{hash:016x}")
+    };
+
+    (
+        format!("unmapped_{}", fallback),
+        format!("未映射测试指标 ({})", raw_sheet_name),
+    )
 }
 
 fn get_float(cell: &Data) -> Option<f64> {
@@ -50,12 +124,14 @@ fn get_string(cell: &Data) -> Option<String> {
     }
 }
 
-
-
 fn find_param_key(row: &[Data]) -> Option<String> {
     row.iter().take(4).find_map(|cell| {
         let key = get_string(cell)?.to_uppercase();
-        if ["AVERAGE", "MAX", "MIN", "STDEV", "CA", "CP", "CPK", "USL", "LSL"].contains(&key.as_str()) {
+        if [
+            "AVERAGE", "MAX", "MIN", "STDEV", "CA", "CP", "CPK", "USL", "LSL",
+        ]
+        .contains(&key.as_str())
+        {
             Some(key)
         } else {
             None
@@ -88,7 +164,8 @@ fn summarize_values(values: &[f64]) -> (Option<f64>, Option<f64>, Option<f64>, O
 }
 
 pub fn parse_excel_file(path: &str) -> Result<Vec<SheetData>, String> {
-    let mut workbook = open_workbook_auto(path).map_err(|e| format!("Failed to open Excel file: {}", e))?;
+    let mut workbook =
+        open_workbook_auto(path).map_err(|e| format!("Failed to open Excel file: {}", e))?;
     let sheet_names = workbook.sheet_names().to_vec();
     let mut sheets = Vec::new();
 
@@ -148,15 +225,42 @@ pub fn parse_excel_file(path: &str) -> Result<Vec<SheetData>, String> {
             let mut indicator_columns: Vec<usize> = Vec::new();
             for col_idx in (pcbasn_col_idx + 1)..header_row.len() {
                 if let Some(name) = get_string(&header_row[col_idx]) {
-                    let average = param_rows.get("AVERAGE").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let max = param_rows.get("MAX").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let min = param_rows.get("MIN").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let stdev = param_rows.get("STDEV").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let ca = param_rows.get("CA").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let cp = param_rows.get("CP").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let cpk = param_rows.get("CPK").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let usl = param_rows.get("USL").and_then(|r| r.get(col_idx)).and_then(get_float);
-                    let lsl = param_rows.get("LSL").and_then(|r| r.get(col_idx)).and_then(get_float);
+                    let average = param_rows
+                        .get("AVERAGE")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let max = param_rows
+                        .get("MAX")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let min = param_rows
+                        .get("MIN")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let stdev = param_rows
+                        .get("STDEV")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let ca = param_rows
+                        .get("CA")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let cp = param_rows
+                        .get("CP")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let cpk = param_rows
+                        .get("CPK")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let usl = param_rows
+                        .get("USL")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
+                    let lsl = param_rows
+                        .get("LSL")
+                        .and_then(|r| r.get(col_idx))
+                        .and_then(get_float);
 
                     indicators.push(IndicatorSummary {
                         name,
@@ -228,8 +332,13 @@ pub fn parse_excel_file(path: &str) -> Result<Vec<SheetData>, String> {
 
             // Only add sheet if it contains valid indicators
             if !indicators.is_empty() {
+                let raw_sheet_name = sheet_name;
+                let (test_metric_key, display_name) = resolve_test_metric(&raw_sheet_name);
                 sheets.push(SheetData {
-                    sheet_name,
+                    sheet_name: display_name.clone(),
+                    raw_sheet_name,
+                    test_metric_key,
+                    display_name,
                     pcbasn_list,
                     indicators,
                 });
@@ -247,7 +356,8 @@ mod tests {
 
     #[test]
     fn test_parse_demo_excel() {
-        let demo_path = "/Users/zhaoyang/Downloads/AP-735 AKTS new filter RF CPK data_20260318_demo.xlsx";
+        let demo_path =
+            "/Users/zhaoyang/Downloads/AP-735 AKTS new filter RF CPK data_20260318_demo.xlsx";
         if Path::new(demo_path).exists() {
             let sheets = parse_excel_file(demo_path).expect("Failed to parse demo excel");
             assert!(!sheets.is_empty(), "Sheets should not be empty");
@@ -257,13 +367,22 @@ mod tests {
             println!("PCBASN Count: {}", first_sheet.pcbasn_list.len());
             println!("Indicators Count: {}", first_sheet.indicators.len());
 
-            assert!(!first_sheet.pcbasn_list.is_empty(), "PCBASN list should not be empty");
-            assert!(!first_sheet.indicators.is_empty(), "Indicators should not be empty");
+            assert!(
+                !first_sheet.pcbasn_list.is_empty(),
+                "PCBASN list should not be empty"
+            );
+            assert!(
+                !first_sheet.indicators.is_empty(),
+                "Indicators should not be empty"
+            );
 
             let first_ind = &first_sheet.indicators[0];
             println!("First Indicator: {:?}", first_ind.name);
             println!("USL: {:?}, LSL: {:?}", first_ind.usl, first_ind.lsl);
-            println!("Average: {:?}, Stdev: {:?}", first_ind.average, first_ind.stdev);
+            println!(
+                "Average: {:?}, Stdev: {:?}",
+                first_ind.average, first_ind.stdev
+            );
             println!("Values Count: {}", first_ind.values.len());
 
             assert!(first_ind.usl.is_some(), "USL should be parsed");
