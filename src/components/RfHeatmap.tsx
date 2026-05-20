@@ -99,12 +99,28 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
         textStyle: { color: "#f1f5f9", fontSize: 13, fontWeight: "bold" },
       },
       tooltip: {
-        position: "top",
+        appendToBody: true,
+        position: (point: number[], _params: any, _dom: HTMLElement, _rect: any, size: { contentSize: number[]; viewSize: number[] }) => {
+          const [mouseX, mouseY] = point;
+          const [tipW, tipH] = size.contentSize;
+          const [viewW, viewH] = size.viewSize;
+          // horizontal: center on cursor, clamp to viewport
+          let x = mouseX - tipW / 2;
+          x = Math.max(8, Math.min(x, viewW - tipW - 8));
+          // vertical: if cursor in upper half, show below; otherwise show above
+          let y: number;
+          if (mouseY < viewH / 2) {
+            y = mouseY + 20;
+          } else {
+            y = mouseY - tipH - 20;
+          }
+          return [x, y];
+        },
         backgroundColor: "rgba(30, 41, 59, 0.95)",
         borderColor: "#475569",
         borderWidth: 1,
         textStyle: { color: "#f8fafc" },
-        extraCssText: "box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: auto;",
+        extraCssText: "box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); border-radius: 8px; pointer-events: auto; z-index: 9999;",
         formatter: (params: any) => {
           const val = params.data;
           if (!val) return "";
@@ -248,7 +264,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
   }
 
   return (
-    <div className="w-full h-full bg-slate-900/60 p-4 border border-slate-800 rounded-2xl relative shadow-inner flex flex-col justify-between">
+    <div className="w-full h-full bg-slate-900/60 p-4 border border-slate-800 rounded-2xl relative shadow-inner flex flex-col justify-between overflow-visible">
       <div className="flex-1 min-h-[360px]">
         <ReactECharts
           option={option}
