@@ -22,6 +22,8 @@ interface HeaderProps {
   onExport: () => void;
   onOpenSettings: () => void;
   updateState: UpdateState;
+  hasDb: boolean;
+  onSaveToDb: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -33,6 +35,8 @@ const Header: React.FC<HeaderProps> = ({
   onExport,
   onOpenSettings,
   updateState,
+  hasDb,
+  onSaveToDb,
 }) => {
   const { locale } = useLocale();
   const [appVersion, setAppVersion] = useState(APP_VERSION);
@@ -116,6 +120,16 @@ const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 border-l border-slate-700/60 pl-4">
+          <button
+            onClick={onSaveToDb}
+            disabled={!fileName}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 rounded-lg border border-slate-700 transition-all shadow-sm flex items-center space-x-1.5 px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            title={t("dbSaveToDbTooltip", locale)}
+          >
+            <div className={`w-2 h-2 rounded-full shadow-inner ${hasDb ? "bg-emerald-400 shadow-emerald-400/50" : "bg-slate-600"}`} />
+            <span>{t("dbSaveBtn", locale)}</span>
+          </button>
+          
           <button
             onClick={onExport}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 rounded-lg border border-slate-700 transition-all shadow-sm flex items-center space-x-1.5 px-3 text-xs"

@@ -6,18 +6,24 @@ export interface ExportProgressState {
   visible: boolean;
   percent: number;
   text: string;
+  title?: string;
+  description?: string;
 }
 
 interface ExportProgressModalProps {
   progress: ExportProgressState;
   title?: string;
   description?: string;
+  onCancel?: () => void;
 }
 
-const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress, title, description }) => {
+const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress, title, description, onCancel }) => {
   const { locale } = useLocale();
 
   if (!progress.visible) return null;
+
+  const modalTitle = title || progress.title || t("generatingReport", locale);
+  const modalDesc = description || progress.description || t("generatingReportDesc", locale);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm select-none">
@@ -27,8 +33,8 @@ const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress, tit
             <FileSpreadsheet className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h3 className="text-slate-200 font-bold text-sm">{title || t("generatingReport", locale)}</h3>
-            <p className="text-xs text-slate-400">{description || t("generatingReportDesc", locale)}</p>
+            <h3 className="text-slate-200 font-bold text-sm">{modalTitle}</h3>
+            <p className="text-xs text-slate-400">{modalDesc}</p>
           </div>
         </div>
 
@@ -44,6 +50,17 @@ const ExportProgressModal: React.FC<ExportProgressModalProps> = ({ progress, tit
             />
           </div>
         </div>
+
+        {onCancel && progress.percent < 100 && (
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={onCancel}
+              className="px-4 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 active:bg-rose-700/40 text-rose-400 hover:text-rose-300 text-xs font-bold rounded-xl border border-rose-500/30 transition-all active:scale-95"
+            >
+              {t("dbStopImport", locale)}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
