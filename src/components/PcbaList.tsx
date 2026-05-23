@@ -3,6 +3,7 @@ import { Search, BarChart2, ListFilter } from "lucide-react";
 import { CpkStatus, IndicatorSummary } from "../types";
 import { t, useLocale } from "../i18n";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
+import { CpkLevelTag } from "./CpkLevelTag";
 
 interface PcbaListProps {
   indicators: IndicatorSummary[];
@@ -22,14 +23,6 @@ const ITEM_HEIGHT = 48; // 固定行高，支持两行文本展示
 const BUFFER_ITEMS = 10; // 前后缓冲渲染数量
 
 const formatCpk = (cpk: number | null) => (cpk === null || cpk === undefined ? "N/A" : cpk.toFixed(2));
-
-const getCpkColor = (cpk: number | null) => {
-  if (cpk === null || cpk === undefined) return "text-slate-100 bg-slate-400 dark:bg-slate-750";
-  if (cpk >= 2.0) return "text-white bg-cyan-600 dark:bg-cyan-500";
-  if (cpk >= 1.33) return "text-white bg-emerald-600 dark:bg-emerald-500";
-  if (cpk >= 1.0) return "text-amber-950 bg-amber-400 dark:bg-amber-500";
-  return "text-white bg-rose-600 dark:bg-rose-500";
-};
 
 const PcbaList: React.FC<PcbaListProps> = ({
   indicators,
@@ -135,40 +128,34 @@ const PcbaList: React.FC<PcbaListProps> = ({
           {[
             {
               status: "red" as const,
-              className: "text-white bg-rose-600 dark:bg-rose-500",
               title: `CPK < 1.00 (${t("fail", locale)})`,
             },
             {
               status: "yellow" as const,
-              className: "text-amber-950 bg-amber-400 dark:bg-amber-500",
               title: `1.00 ≤ CPK < 1.33 (${t("passable", locale)})`,
             },
             {
               status: "green" as const,
-              className: "text-white bg-emerald-600 dark:bg-emerald-500",
               title: `1.33 ≤ CPK < 2.00 (${t("good", locale)})`,
             },
             {
               status: "cyan" as const,
-              className: "text-white bg-cyan-600 dark:bg-cyan-500",
               title: `CPK ≥ 2.00 (${t("worldClass", locale)})`,
             },
           ].map((option) => {
             const isEnabled = enabledStatuses.has(option.status);
             return (
-              <button
+              <CpkLevelTag
                 key={option.status}
-                type="button"
+                status={option.status}
+                active={isEnabled}
+                variant="count"
                 onClick={() => onToggleStatus(option.status)}
                 title={option.title}
-                className={`rounded px-2 py-1 text-[10px] font-mono font-semibold transition-all truncate ${
-                  isEnabled
-                    ? option.className
-                    : "bg-slate-100 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 opacity-60"
-                }`}
+                className="truncate"
               >
                 {statusCounts[option.status]}
-              </button>
+              </CpkLevelTag>
             );
           })}
         </div>
@@ -193,7 +180,6 @@ const PcbaList: React.FC<PcbaListProps> = ({
             {visibleItems.map(({ item, top }) => {
               const { indicator, index } = item;
               const isSelected = selectedIndicatorIdx === index;
-              const cpkColor = getCpkColor(indicator.cpk);
               const parsed = parseRFIndicator(indicator.name, rfMappings);
               
               return (
@@ -220,11 +206,9 @@ const PcbaList: React.FC<PcbaListProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`text-[8px] px-1.5 py-0.5 rounded-md font-semibold shrink-0 ${isSelected ? "bg-blue-600 text-white" : cpkColor}`}
-                  >
+                  <CpkLevelTag cpk={indicator.cpk} selected={isSelected}>
                     CPK {formatCpk(indicator.cpk)}
-                  </span>
+                  </CpkLevelTag>
                 </div>
               );
             })}

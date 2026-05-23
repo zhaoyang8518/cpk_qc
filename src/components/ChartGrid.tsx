@@ -5,6 +5,7 @@ import CpkChart from "./CpkChart";
 import { calculateSpc } from "../utils/spc";
 import { t, useLocale } from "../i18n";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
+import { CpkLevelTag } from "./CpkLevelTag";
 
 interface ChartGridProps {
   indicators: IndicatorSummary[];
@@ -17,14 +18,6 @@ interface ChartGridProps {
   lineWidth?: number;
   rfMappings: RfMappingConfig;
 }
-const getStatusBadgeStyle = (cpk: number | null) => {
-  if (cpk === null || cpk === undefined) return "text-slate-100 bg-slate-400 dark:bg-slate-750";
-  if (cpk >= 2.0) return "text-white bg-cyan-600 dark:bg-cyan-500";
-  if (cpk >= 1.33) return "text-white bg-emerald-600 dark:bg-emerald-500";
-  if (cpk >= 1.0) return "text-amber-950 bg-amber-400 dark:bg-amber-500";
-  return "text-white bg-rose-600 dark:bg-rose-500";
-};
-
 const ChartGrid: React.FC<ChartGridProps> = ({
   indicators,
   visibleIndicatorIndexes,
@@ -345,11 +338,9 @@ const ChartGrid: React.FC<ChartGridProps> = ({
 
               {/* Status & CPK Badge */}
               <div className="flex items-center space-x-2 flex-shrink-0">
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-lg font-mono font-semibold shadow-sm ${getStatusBadgeStyle(cpk)}`}
-                >
+                <CpkLevelTag cpk={cpk} variant="status">
                   {status}
-                </span>
+                </CpkLevelTag>
                 <div className="flex items-center space-x-1 text-xs font-mono bg-slate-900/60 px-2 py-0.5 rounded-lg border border-slate-700 shadow-inner">
                   <span className="text-slate-400">CPK:</span>
                   <span style={{ color: statusColor }} className="font-bold">
