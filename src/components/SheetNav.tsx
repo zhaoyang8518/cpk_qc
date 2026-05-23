@@ -42,6 +42,7 @@ const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChan
               <button
                 key={idx}
                 onClick={() => onSheetChange(idx)}
+                title={`${sheet.display_name}\n${sheet.test_metric_key}\n${sheet.raw_sheet_name}`}
                 className={`flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                   isActive
                     ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20 scale-105"
@@ -49,7 +50,7 @@ const SheetNav: React.FC<SheetNavProps> = ({ sheets, activeSheetIdx, onSheetChan
                 }`}
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>{sheet.sheet_name}</span>
+                <span>{sheet.display_name}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                     isActive ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-500"

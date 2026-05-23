@@ -2,12 +2,14 @@ import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Store } from "@tauri-apps/plugin-store";
 import { ChevronLeft, ChevronRight, FileSpreadsheet } from "lucide-react";
-import { CpkStatus, SheetData } from "./types";
+import { CpkStatus, SheetData, Supplier } from "./types";
 import Header from "./components/Header";
 import SheetNav from "./components/SheetNav";
 import PcbaList from "./components/PcbaList";
 import SettingsModal from "./components/SettingsModal";
+import SaveToDbModal from "./components/SaveToDbModal";
 import MainContent from "./components/MainContent";
 import ExportProgressModal, { ExportProgressState } from "./components/ExportProgressModal";
 import { t, Locale, LocaleProvider } from "./i18n";
@@ -37,12 +39,31 @@ const App: React.FC = () => {
   );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState<boolean>(false);
+  const [fullFilePath, setFullFilePath] = useState<string>("");
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const updateState = useAutoUpdater(locale);
   const [importProgress, setImportProgress] = useState<ExportProgressState>(EMPTY_PROGRESS);
+  const [postgresUri, setPostgresUri] = useState<string>("");
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [store, setStore] = useState<Store | null>(null);
+
+  useEffect(() => {
+    async function initStore() {
+      const s = await Store.load("settings.json");
+      setStore(s);
+      const uri = await s.get<string>("postgres_uri");
+      if (uri) setPostgresUri(uri);
+      const savedSuppliers = await s.get<Supplier[]>("suppliers");
+      if (savedSuppliers && Array.isArray(savedSuppliers)) {
+        setSuppliers(savedSuppliers);
+      }
+    }
+    initStore();
+  }, []);
 
   // RF Custom Mappings State
   const [rfMappings, setRfMappings] = useState<RfMappingConfig>(() => {
@@ -124,6 +145,7 @@ const App: React.FC = () => {
       setSelectedIndicatorIdx(null);
       resetRfView();
       setDisplayFileName(filePath.split(/[/\\]/).pop() || filePath);
+      setFullFilePath(filePath);
 
       setImportProgress({ visible: true, percent: 100, text: t("importProgressDone", locale) });
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -144,6 +166,56 @@ const App: React.FC = () => {
       filters: [{ name: "Excel Files", extensions: ["xlsx", "xls", "xlsm", "xlsb"] }],
     });
     if (selectedPath) await loadFileByPath(selectedPath);
+  };
+
+  const handleSaveToDb = async (dateStr: string, supplier: Supplier, forceOverwrite: boolean) => {
+    setImportProgress({
+      visible: true,
+      percent: 0,
+      text: t("dbImportConnecting", locale),
+      title: t("dbSaveToDbTitle", locale),
+      description: t("dbImportWriting", locale),
+    });
+
+    try {
+      const res = await invoke("save_to_db", {
+        filePath: fullFilePath,
+        testDate: dateStr,
+        supplierKey: supplier.supplier_key,
+        supplierName: supplier.supplier_name,
+        sheets,
+        postgresUri,
+        forceOverwrite,
+      });
+
+      // Keep success progress for a brief moment for good UX
+      setImportProgress({
+        visible: true,
+        percent: 100,
+        text: t("dbImportSuccessTitle", locale),
+        title: t("dbSaveToDbTitle", locale),
+        description: t("dbImportSuccessDesc", locale),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      setImportProgress(EMPTY_PROGRESS);
+
+      alert(`${t("dbImportSuccessAlert", locale)}${res}`);
+    } catch (err: any) {
+      setImportProgress(EMPTY_PROGRESS);
+      if (String(err) === "IMPORT_CANCELLED") {
+        alert(t("dbImportCancelAlert", locale));
+      } else {
+        throw err; // throw back to SaveToDbModal to display error
+      }
+    }
+  };
+
+  const handleCancelDbImport = async () => {
+    try {
+      await invoke("cancel_db_import");
+    } catch (e) {
+      console.error("Failed to cancel DB import", e);
+    }
   };
 
   // ── 拖拽监听：drag-enter / drag-leave / drag-drop ──
@@ -175,6 +247,30 @@ const App: React.FC = () => {
       unlistenDrop?.();
     };
   }, [loadFileByPath]);
+
+  // ── 数据库导入进度监听 ──
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    
+    async function setupDbProgress() {
+      unlisten = await listen<{ percent: number; text: string }>("db-import-progress", (event) => {
+        setImportProgress((prev) => {
+          // Only update if it's the database progress modal currently visible
+          if (!prev.visible || prev.title !== t("dbSaveToDbTitle", locale)) return prev;
+          return {
+            ...prev,
+            percent: Math.round(event.payload.percent),
+            text: event.payload.text,
+          };
+        });
+      });
+    }
+
+    setupDbProgress();
+    return () => {
+      unlisten?.();
+    };
+  }, [locale]);
 
   const rfFilteredIndicators = useMemo(() => {
     const indicators = currentSheet?.indicators || [];
@@ -250,6 +346,8 @@ const App: React.FC = () => {
           onGridChange={setGridCols}
           onExport={handleExport}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          hasDb={!!postgresUri}
+          onSaveToDb={() => setIsSaveModalOpen(true)}
           updateState={{
             available: updateState.available,
             checking: updateState.checking,
@@ -361,12 +459,39 @@ const App: React.FC = () => {
           rfMappings={rfMappings}
           onChangeRfMappings={handleRfMappingsChange}
           onResetRfMappings={handleRfMappingsReset}
+          postgresUri={postgresUri}
+          onChangePostgresUri={async (uri) => {
+            setPostgresUri(uri);
+            if (store) {
+              await store.set("postgres_uri", uri);
+              await store.save();
+            }
+          }}
+          suppliers={suppliers}
+          onChangeSuppliers={async (nextSuppliers) => {
+            setSuppliers(nextSuppliers);
+            if (store) {
+              await store.set("suppliers", nextSuppliers);
+              await store.save();
+            }
+          }}
+        />
+
+        <SaveToDbModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          filePath={fullFilePath}
+          fileName={displayFileName}
+          postgresUri={postgresUri}
+          suppliers={suppliers}
+          onSave={handleSaveToDb}
         />
 
         <ExportProgressModal
           progress={importProgress}
-          title={t("importProgressTitle", locale)}
-          description={t("importProgressDesc", locale)}
+          title={importProgress.title || t("importProgressTitle", locale)}
+          description={importProgress.description || t("importProgressDesc", locale)}
+          onCancel={importProgress.title === t("dbSaveToDbTitle", locale) ? handleCancelDbImport : undefined}
         />
         <ExportProgressModal progress={exportProgress} />
       </div>
