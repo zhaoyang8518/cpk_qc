@@ -56,7 +56,7 @@ fn resolve_test_metric(raw_sheet_name: &str) -> (String, String) {
             key: "rf_packet_error_rate_accuracy",
             display_name: "包误差率精度测试项",
         }),
-        "CPK summary RSSI_Accuracy" => Some(TestMetricMeta {
+        "CPK summary RSSI_Accuracy" | "CPK summary RSI_Accuracy" => Some(TestMetricMeta {
             key: "rf_rssi_accuracy",
             display_name: "接收信号强度指示精度测试项",
         }),

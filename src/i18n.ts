@@ -75,6 +75,10 @@ export const translations = {
     // SettingsModal
     modalTitle: "Advanced Settings",
     chartTheme: "Chart Color Theme",
+    theme: "Interface Theme",
+    theme_dark: "Dark Mode",
+    theme_light: "Light Mode",
+    theme_system: "System Default",
     lineWidthTitle: "Normal Curve Line Width",
     thin: "Thin (1px)",
     medium: "Med (2.5px)",
@@ -245,6 +249,14 @@ export const translations = {
     dbImportSuccessAlert: "Save successful! Import Record ID: ",
     dbImportCancelAlert: "Import cancelled, data was not modified.",
     dbStopImport: "Stop Import",
+
+    // Test Metric Sheets
+    rf_power_accuracy: "Power Accuracy Test",
+    rf_evm_accuracy: "EVM Accuracy Test",
+    rf_spectrum_mask_accuracy: "Spectrum Mask Accuracy Test",
+    rf_frequency_accuracy: "Frequency Accuracy Test",
+    rf_packet_error_rate_accuracy: "Packet Error Rate Test",
+    rf_rssi_accuracy: "RSSI Accuracy Test",
   },
   zh: {
     // Header
@@ -302,6 +314,10 @@ export const translations = {
     // SettingsModal
     modalTitle: "高级系统设置",
     chartTheme: "直方柱颜色主题",
+    theme: "界面主题",
+    theme_dark: "深色模式",
+    theme_light: "浅色模式",
+    theme_system: "跟随系统",
     lineWidthTitle: "正态拟合曲线宽度",
     thin: "细 (1px)",
     medium: "中 (2.5px)",
@@ -472,9 +488,37 @@ export const translations = {
     dbImportSuccessAlert: "保存成功！入库记录 ID: ",
     dbImportCancelAlert: "已取消入库，数据未被修改。",
     dbStopImport: "停止入库",
+
+    // Test Metric Sheets
+    rf_power_accuracy: "功率精度测试项",
+    rf_evm_accuracy: "误差矢量幅度精度测试项",
+    rf_spectrum_mask_accuracy: "频谱模板精度测试项",
+    rf_frequency_accuracy: "频率精度测试项",
+    rf_packet_error_rate_accuracy: "包误差率精度测试项",
+    rf_rssi_accuracy: "接收信号强度指示精度测试项",
   }
 };
 
 export function t(key: keyof typeof translations.en, locale: Locale): string {
   return translations[locale]?.[key] || translations.en[key] || key;
+}
+
+export function translateSheetName(
+  sheet: { test_metric_key: string; display_name: string; raw_sheet_name: string },
+  locale: Locale
+): string {
+  const key = sheet.test_metric_key;
+  if (key.startsWith("unmapped_")) {
+    if (locale === "zh") {
+      return `未映射测试指标 (${sheet.raw_sheet_name})`;
+    } else {
+      return `Unmapped Test Metric (${sheet.raw_sheet_name})`;
+    }
+  }
+
+  if (key in translations.en) {
+    return t(key as any, locale);
+  }
+
+  return sheet.display_name;
 }

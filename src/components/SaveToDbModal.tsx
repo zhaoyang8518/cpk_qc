@@ -113,13 +113,13 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
           </p>
           
           {!postgresUri && (
-             <div className="text-xs text-amber-400 bg-amber-950/30 p-3 rounded-lg border border-amber-900/50 mt-4 font-mono">
+             <div className="text-xs text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 mt-4 font-mono">
                {t("dbConfigMissing", locale)}
              </div>
           )}
 
           {suppliers.length === 0 && (
-             <div className="text-xs text-amber-400 bg-amber-950/30 p-3 rounded-lg border border-amber-900/50 mt-4">
+             <div className="text-xs text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 mt-4">
                {t("dbSupplierMissing", locale)}
              </div>
           )}
@@ -161,13 +161,13 @@ const SaveToDbModal: React.FC<SaveToDbModalProps> = ({
           </div>
 
           {showOverwriteConfirm && (
-            <div className="text-xs text-amber-400 bg-amber-955/35 p-3 rounded-lg border border-amber-900/50 mt-4">
+            <div className="text-xs text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-955/35 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 mt-4">
               {t("dbOverwriteConfirm", locale)}
             </div>
           )}
 
           {error && (
-            <div className="text-xs text-rose-400 bg-rose-950/30 p-3 rounded-lg border border-rose-900/50 font-mono break-all mt-2">
+            <div className="text-xs text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 font-mono break-all mt-2">
               ❌ {error}
             </div>
           )}

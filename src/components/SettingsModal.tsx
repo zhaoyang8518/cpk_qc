@@ -15,6 +15,7 @@ import React, { useEffect, useState } from "react";
 import { Locale, t, useLocale } from "../i18n";
 import { Supplier } from "../types";
 import { DEFAULT_RF_MAPPINGS, RfMappingConfig } from "../utils/rfParser";
+import { useTheme, Theme } from "../theme";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeSuppliers,
 }) => {
   const { locale, setLocale } = useLocale();
+  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<
     "general" | "rfMapping" | "database" | "suppliers"
   >("general");
@@ -316,6 +318,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       }`}
                     >
                       <span>{lang.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 0.5: Interface Theme */}
+              <div className="space-y-3 border-t border-slate-800 pt-5">
+                <div className="flex items-center space-x-2 text-sm font-bold text-slate-300">
+                  <span className="text-blue-400 font-bold">🌓</span>
+                  <span>{t("theme", locale)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  {[
+                    { label: t("theme_light", locale), value: "light" as Theme },
+                    { label: t("theme_dark", locale), value: "dark" as Theme },
+                    { label: t("theme_system", locale), value: "system" as Theme },
+                  ].map((tOpt) => (
+                    <button
+                      key={tOpt.value}
+                      onClick={() => setTheme(tOpt.value)}
+                      className={`flex items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                        theme === tOpt.value
+                          ? "border-blue-500 bg-blue-600/20 text-blue-300 shadow-lg shadow-blue-500/10 scale-105"
+                          : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                      }`}
+                    >
+                      <span>{tOpt.label}</span>
                     </button>
                   ))}
                 </div>
@@ -620,12 +649,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {dbStatus === "success" && (
-                <div className="text-xs text-emerald-400 bg-emerald-950/30 p-3 rounded-lg border border-emerald-900/50 mt-4 font-mono">
+                <div className="text-xs text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 mt-4 font-mono">
                   {t("dbTestSuccess", locale)}
                 </div>
               )}
               {dbStatus === "error" && (
-                <div className="text-xs text-rose-400 bg-rose-950/30 p-3 rounded-lg border border-rose-900/50 mt-4 font-mono break-all">
+                <div className="text-xs text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 mt-4 font-mono break-all">
                   {t("dbTestError", locale)}{dbError}
                 </div>
               )}

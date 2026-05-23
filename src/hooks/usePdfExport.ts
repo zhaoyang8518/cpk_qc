@@ -7,7 +7,7 @@ import autoTable from "jspdf-autotable";
 import * as echarts from "echarts";
 import { APP_NAME, APP_VERSION } from "../appMeta";
 import { ExportProgressState } from "../components/ExportProgressModal";
-import { Locale, t } from "../i18n";
+import { Locale, t, translateSheetName } from "../i18n";
 import { CpkStatus, SheetData } from "../types";
 import { getCpkStatus } from "../utils/cpk";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
@@ -98,7 +98,7 @@ export const usePdfExport = ({
 
       const infoRows = [
         [t("infoFileName", locale), displayFileName || t("noFile", locale)],
-        [t("infoTestMetricName", locale), sheet.display_name],
+        [t("infoTestMetricName", locale), translateSheetName(sheet, locale)],
         [t("infoTestMetricKey", locale), sheet.test_metric_key],
         [t("infoSourceName", locale), sheet.raw_sheet_name],
         [t("infoTime", locale), ts],
@@ -236,7 +236,7 @@ export const usePdfExport = ({
       setExportProgress({ visible: true, percent: 92, text: t("exportSaveLoc", locale) });
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const defaultFileName = `CPK_Report_${sheet.display_name}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
+      const defaultFileName = `CPK_Report_${translateSheetName(sheet, locale)}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
       const savePath = await save({
         defaultPath: defaultFileName,
         filters: [{ name: "PDF Report", extensions: ["pdf"] }],

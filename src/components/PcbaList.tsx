@@ -24,11 +24,11 @@ const BUFFER_ITEMS = 10; // 前后缓冲渲染数量
 const formatCpk = (cpk: number | null) => (cpk === null || cpk === undefined ? "N/A" : cpk.toFixed(2));
 
 const getCpkColor = (cpk: number | null) => {
-  if (cpk === null || cpk === undefined) return "text-slate-500 border-slate-700 bg-slate-900/60";
-  if (cpk >= 2.0) return "text-cyan-300 border-cyan-500/30 bg-cyan-500/10";
-  if (cpk >= 1.33) return "text-emerald-300 border-emerald-500/30 bg-emerald-500/10";
-  if (cpk >= 1.0) return "text-amber-300 border-amber-500/30 bg-amber-500/10";
-  return "text-rose-300 border-rose-500/30 bg-rose-500/10";
+  if (cpk === null || cpk === undefined) return "text-slate-100 bg-slate-400 dark:bg-slate-750";
+  if (cpk >= 2.0) return "text-white bg-cyan-600 dark:bg-cyan-500";
+  if (cpk >= 1.33) return "text-white bg-emerald-600 dark:bg-emerald-500";
+  if (cpk >= 1.0) return "text-amber-950 bg-amber-400 dark:bg-amber-500";
+  return "text-white bg-rose-600 dark:bg-rose-500";
 };
 
 const PcbaList: React.FC<PcbaListProps> = ({
@@ -135,22 +135,22 @@ const PcbaList: React.FC<PcbaListProps> = ({
           {[
             {
               status: "red" as const,
-              className: "text-rose-300 border-rose-500/30 bg-rose-500/10",
+              className: "text-white bg-rose-600 dark:bg-rose-500",
               title: `CPK < 1.00 (${t("fail", locale)})`,
             },
             {
               status: "yellow" as const,
-              className: "text-amber-300 border-amber-500/30 bg-amber-500/10",
+              className: "text-amber-950 bg-amber-400 dark:bg-amber-500",
               title: `1.00 ≤ CPK < 1.33 (${t("passable", locale)})`,
             },
             {
               status: "green" as const,
-              className: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10",
+              className: "text-white bg-emerald-600 dark:bg-emerald-500",
               title: `1.33 ≤ CPK < 2.00 (${t("good", locale)})`,
             },
             {
               status: "cyan" as const,
-              className: "text-cyan-300 border-cyan-500/30 bg-cyan-500/10",
+              className: "text-white bg-cyan-600 dark:bg-cyan-500",
               title: `CPK ≥ 2.00 (${t("worldClass", locale)})`,
             },
           ].map((option) => {
@@ -161,10 +161,10 @@ const PcbaList: React.FC<PcbaListProps> = ({
                 type="button"
                 onClick={() => onToggleStatus(option.status)}
                 title={option.title}
-                className={`rounded border px-2 py-1 text-[10px] font-mono font-medium transition-all truncate ${
+                className={`rounded px-2 py-1 text-[10px] font-mono font-semibold transition-all truncate ${
                   isEnabled
                     ? option.className
-                    : "border-slate-700 bg-slate-900/50 text-slate-500 opacity-60"
+                    : "bg-slate-100 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 opacity-60"
                 }`}
               >
                 {statusCounts[option.status]}
@@ -221,7 +221,7 @@ const PcbaList: React.FC<PcbaListProps> = ({
                     </div>
                   </div>
                   <span
-                    className={`text-[8px] px-1.5 py-0.5 rounded border shrink-0 ${isSelected ? "bg-blue-500 text-white border-blue-400" : cpkColor}`}
+                    className={`text-[8px] px-1.5 py-0.5 rounded-md font-semibold shrink-0 ${isSelected ? "bg-blue-600 text-white" : cpkColor}`}
                   >
                     CPK {formatCpk(indicator.cpk)}
                   </span>

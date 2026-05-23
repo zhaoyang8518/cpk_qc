@@ -17,6 +17,13 @@ interface ChartGridProps {
   lineWidth?: number;
   rfMappings: RfMappingConfig;
 }
+const getStatusBadgeStyle = (cpk: number | null) => {
+  if (cpk === null || cpk === undefined) return "text-slate-100 bg-slate-400 dark:bg-slate-750";
+  if (cpk >= 2.0) return "text-white bg-cyan-600 dark:bg-cyan-500";
+  if (cpk >= 1.33) return "text-white bg-emerald-600 dark:bg-emerald-500";
+  if (cpk >= 1.0) return "text-amber-950 bg-amber-400 dark:bg-amber-500";
+  return "text-white bg-rose-600 dark:bg-rose-500";
+};
 
 const ChartGrid: React.FC<ChartGridProps> = ({
   indicators,
@@ -237,9 +244,9 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                   <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center space-x-2">
                     <span>{t("diagAction", locale)}</span>
                   </h3>
-                  <div className={`p-4 rounded-xl border leading-relaxed ${diagType === "perfect" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200" :
-                    diagType === "offset" ? "bg-amber-500/10 border-amber-500/30 text-amber-200" :
-                      "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                  <div className={`p-4 rounded-xl border leading-relaxed ${diagType === "perfect" ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-200" :
+                    diagType === "offset" ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-200" :
+                      "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200"
                     }`}>
                     <div className="font-bold mb-1 flex items-center space-x-2">
                       {diagType === "perfect" ? <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
@@ -339,8 +346,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
               {/* Status & CPK Badge */}
               <div className="flex items-center space-x-2 flex-shrink-0">
                 <span
-                  style={{ color: statusColor, borderColor: statusColor }}
-                  className="text-[10px] px-2 py-0.5 rounded-lg border bg-slate-900/60 font-mono shadow-inner"
+                  className={`text-[10px] px-2 py-0.5 rounded-lg font-mono font-semibold shadow-sm ${getStatusBadgeStyle(cpk)}`}
                 >
                   {status}
                 </span>
@@ -432,8 +438,8 @@ const ChartGrid: React.FC<ChartGridProps> = ({
             {actionTrigger && (
               <div
                 className={`flex items-start space-x-2 p-2.5 rounded-lg border text-xs leading-relaxed ${cpAlert || (cpk !== null && cpk < 1.0)
-                  ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                  : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                  ? "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200"
+                  : "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-200"
                   }`}
               >
                 {cpAlert || (cpk !== null && cpk < 1.0) ? (
