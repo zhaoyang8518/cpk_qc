@@ -11,6 +11,7 @@ import PcbaList from "./components/PcbaList";
 import SettingsModal from "./components/SettingsModal";
 import SaveToDbModal from "./components/SaveToDbModal";
 import MainContent from "./components/MainContent";
+import AiAssistantDrawer from "./components/AiAssistantDrawer";
 import ExportProgressModal, { ExportProgressState } from "./components/ExportProgressModal";
 import { t, Locale, LocaleProvider } from "./i18n";
 import { RfMappingConfig, DEFAULT_RF_MAPPINGS, mergeRfMappingsWithDefaults, parseRFIndicator } from "./utils/rfParser";
@@ -20,6 +21,7 @@ import { useResizableSidebar } from "./hooks/useResizableSidebar";
 import { useRfFilters } from "./hooks/useRfFilters";
 import { usePdfExport } from "./hooks/usePdfExport";
 import { useAutoUpdater } from "./hooks/useAutoUpdater";
+import { loadModelSettings } from "./model";
 
 const EXCEL_EXTS = [".xlsx", ".xls", ".xlsm", ".xlsb"];
 const EMPTY_PROGRESS: ExportProgressState = { visible: false, percent: 0, text: "" };
@@ -40,6 +42,7 @@ const App: React.FC = () => {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState<boolean>(false);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState<boolean>(false);
   const [fullFilePath, setFullFilePath] = useState<string>("");
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
@@ -49,6 +52,8 @@ const App: React.FC = () => {
   const [importProgress, setImportProgress] = useState<ExportProgressState>(EMPTY_PROGRESS);
   const [postgresUri, setPostgresUri] = useState<string>("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [isDbEnabled, setIsDbEnabled] = useState<boolean>(false);
+  const [isAiEnabled, setIsAiEnabled] = useState<boolean>(false);
   const [store, setStore] = useState<Store | null>(null);
 
   useEffect(() => {
@@ -57,12 +62,20 @@ const App: React.FC = () => {
       setStore(s);
       const uri = await s.get<string>("postgres_uri");
       if (uri) setPostgresUri(uri);
+      const dbEnabledVal = await s.get<boolean>("db_enabled");
+      setIsDbEnabled(!!dbEnabledVal);
       const savedSuppliers = await s.get<Supplier[]>("suppliers");
       if (savedSuppliers && Array.isArray(savedSuppliers)) {
         setSuppliers(savedSuppliers);
       }
     }
     initStore();
+  }, []);
+
+  useEffect(() => {
+    loadModelSettings().then((settings) => {
+      setIsAiEnabled(settings.enabled);
+    });
   }, []);
 
   // RF Custom Mappings State
@@ -346,8 +359,11 @@ const App: React.FC = () => {
           onGridChange={setGridCols}
           onExport={handleExport}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenAiAssistant={() => setIsAiAssistantOpen(true)}
           hasDb={!!postgresUri}
           onSaveToDb={() => setIsSaveModalOpen(true)}
+          isAiEnabled={isAiEnabled}
+          isDbEnabled={isDbEnabled}
           updateState={{
             available: updateState.available,
             checking: updateState.checking,
@@ -434,6 +450,16 @@ const App: React.FC = () => {
             activeView={activeView}
             onViewChange={setActiveView}
             onHeatmapCellSelect={selectHeatmapCell}
+            isAiEnabled={isAiEnabled}
+          />
+
+          <AiAssistantDrawer
+            isOpen={isAiAssistantOpen}
+            onClose={() => setIsAiAssistantOpen(false)}
+            currentSheet={currentSheet}
+            fileName={displayFileName}
+            rfMappings={rfMappings}
+            locale={locale}
           />
         </div>
 
@@ -466,6 +492,17 @@ const App: React.FC = () => {
               await store.set("postgres_uri", uri);
               await store.save();
             }
+          }}
+          dbEnabled={isDbEnabled}
+          onChangeDbEnabled={async (enabled) => {
+            setIsDbEnabled(enabled);
+            if (store) {
+              await store.set("db_enabled", enabled);
+              await store.save();
+            }
+          }}
+          onChangeAiEnabled={(enabled) => {
+            setIsAiEnabled(enabled);
           }}
           suppliers={suppliers}
           onChangeSuppliers={async (nextSuppliers) => {

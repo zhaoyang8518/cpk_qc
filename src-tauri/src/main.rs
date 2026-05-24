@@ -1,12 +1,15 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use cpk_core::{parse_excel_file, SheetData};
 use cpk_storage::Storage;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::Read;
+use std::path::PathBuf;
 use tauri::Emitter;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,10 +19,92 @@ struct DbImportState {
     cancel_flag: Arc<AtomicBool>,
 }
 
-#[derive(Clone, serde::Serialize)]
+const API_KEY_FILE: &str = ".cpk_qc_api_key.enc";
+
+#[derive(Clone, Serialize)]
 struct ProgressPayload {
     percent: f64,
     text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ModelSettings {
+    enabled: bool,
+    provider: String,
+    #[serde(rename = "baseUrl")]
+    base_url: String,
+    model: String,
+    #[serde(rename = "apiKey")]
+    api_key: String,
+    #[serde(rename = "isManual", default)]
+    is_manual: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ModelConnectionResult {
+    ok: bool,
+    source: String,
+    models: Vec<String>,
+    message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AiChatMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AiChatRequest {
+    messages: Vec<AiChatMessage>,
+    #[serde(rename = "maxTokens")]
+    max_tokens: Option<u32>,
+    temperature: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AiChatResponse {
+    content: String,
+}
+
+fn get_api_key_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config")
+        .join("cpk_qc")
+        .join(API_KEY_FILE)
+}
+
+#[tauri::command]
+fn save_secure_api_key(api_key: String) -> Result<(), String> {
+    let path = get_api_key_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {}", e))?;
+    }
+
+    if api_key.is_empty() {
+        if path.exists() {
+            fs::remove_file(&path).map_err(|e| format!("Failed to remove API key: {}", e))?;
+        }
+        return Ok(());
+    }
+
+    let encoded = BASE64.encode(api_key.as_bytes());
+    fs::write(&path, encoded).map_err(|e| format!("Failed to save API key: {}", e))
+}
+
+#[tauri::command]
+fn get_secure_api_key() -> Result<String, String> {
+    let path = get_api_key_path();
+    if !path.exists() {
+        return Ok(String::new());
+    }
+
+    let encoded = fs::read_to_string(&path).map_err(|e| format!("Failed to read API key: {}", e))?;
+    let decoded = BASE64
+        .decode(&encoded)
+        .map_err(|e| format!("Failed to decode API key: {}", e))?;
+    String::from_utf8(decoded).map_err(|e| format!("Invalid API key encoding: {}", e))
 }
 
 #[tauri::command]
@@ -38,6 +123,271 @@ async fn test_db_connection(postgres_uri: String) -> Result<String, String> {
     let storage = Storage::connect(&postgres_uri).await?;
     storage.init_db().await?;
     Ok("Connected successfully".to_string())
+}
+
+#[tauri::command]
+async fn test_model_connection(settings: ModelSettings) -> Result<ModelConnectionResult, String> {
+    match settings.provider.as_str() {
+        "ollama" => test_ollama_connection(&settings).await,
+        "openai" | "custom" => test_openai_compatible_connection(&settings).await,
+        _ => Ok(ModelConnectionResult {
+            ok: false,
+            source: "unknown".to_string(),
+            models: vec![],
+            message: format!("Unknown provider: {}", settings.provider),
+        }),
+    }
+}
+
+#[tauri::command]
+async fn ai_chat_completion(
+    settings: ModelSettings,
+    request: AiChatRequest,
+) -> Result<AiChatResponse, String> {
+    if !settings.enabled {
+        return Err("AI model is not enabled.".to_string());
+    }
+    if settings.model.trim().is_empty() {
+        return Err("AI model is empty.".to_string());
+    }
+    if request.messages.is_empty() {
+        return Err("AI request messages are empty.".to_string());
+    }
+
+    match settings.provider.as_str() {
+        "ollama" => ollama_chat_completion(settings, request).await,
+        "openai" | "custom" => openai_compatible_chat_completion(settings, request).await,
+        _ => Err(format!("Unknown provider: {}", settings.provider)),
+    }
+}
+
+async fn ollama_chat_completion(
+    settings: ModelSettings,
+    request: AiChatRequest,
+) -> Result<AiChatResponse, String> {
+    let base_url = if settings.base_url.is_empty() {
+        "http://127.0.0.1:11434".to_string()
+    } else {
+        settings.base_url.trim_end_matches('/').to_string()
+    };
+
+    let messages = request
+        .messages
+        .into_iter()
+        .map(|message| {
+            serde_json::json!({
+                "role": message.role,
+                "content": message.content,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let payload = serde_json::json!({
+        "model": settings.model,
+        "messages": messages,
+        "stream": false,
+        "options": {
+            "temperature": request.temperature.unwrap_or(0.2),
+            "num_predict": request.max_tokens.unwrap_or(2048),
+        }
+    });
+
+    let response = reqwest::Client::new()
+        .post(format!("{}/api/chat", base_url))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to call Ollama: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Ollama returned {}: {}", status, body));
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Ollama chat response: {}", e))?;
+    let content = body["message"]["content"]
+        .as_str()
+        .ok_or_else(|| "Ollama response did not include message.content".to_string())?
+        .to_string();
+
+    Ok(AiChatResponse { content })
+}
+
+async fn openai_compatible_chat_completion(
+    settings: ModelSettings,
+    request: AiChatRequest,
+) -> Result<AiChatResponse, String> {
+    let base_url = if settings.base_url.is_empty() {
+        "https://api.openai.com/v1".to_string()
+    } else {
+        settings.base_url.trim_end_matches('/').to_string()
+    };
+
+    let messages = request
+        .messages
+        .into_iter()
+        .map(|message| {
+            serde_json::json!({
+                "role": message.role,
+                "content": message.content,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let payload = serde_json::json!({
+        "model": settings.model,
+        "messages": messages,
+        "temperature": request.temperature.unwrap_or(0.2),
+        "max_tokens": request.max_tokens.unwrap_or(2048),
+    });
+
+    let mut http_request = reqwest::Client::new()
+        .post(format!("{}/chat/completions", base_url))
+        .json(&payload);
+    if !settings.api_key.is_empty() {
+        http_request = http_request.header("Authorization", format!("Bearer {}", settings.api_key));
+    }
+
+    let response = http_request
+        .send()
+        .await
+        .map_err(|e| format!("Failed to call AI provider: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("AI provider returned {}: {}", status, body));
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse AI provider response: {}", e))?;
+    let content = body["choices"]
+        .as_array()
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice["message"]["content"].as_str())
+        .ok_or_else(|| "AI provider response did not include choices[0].message.content".to_string())?
+        .to_string();
+
+    Ok(AiChatResponse { content })
+}
+
+async fn test_ollama_connection(settings: &ModelSettings) -> Result<ModelConnectionResult, String> {
+    let base_url = if settings.base_url.is_empty() {
+        "http://127.0.0.1:11434".to_string()
+    } else {
+        settings.base_url.trim_end_matches('/').to_string()
+    };
+
+    let response = reqwest::Client::new()
+        .get(format!("{}/api/tags", base_url))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to connect to Ollama: {}", e))?;
+
+    if !response.status().is_success() {
+        return Ok(ModelConnectionResult {
+            ok: false,
+            source: "provider".to_string(),
+            models: vec![],
+            message: format!("Ollama returned {}", response.status()),
+        });
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+
+    let models = body["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|model| model["name"].as_str().map(String::from))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let message = if models.is_empty() {
+        format!("Connected to Ollama at {}, but no models installed.", base_url)
+    } else {
+        format!(
+            "Connected to Ollama at {}. Found {} model(s): {}",
+            base_url,
+            models.len(),
+            models.join(", ")
+        )
+    };
+
+    Ok(ModelConnectionResult {
+        ok: true,
+        source: "provider".to_string(),
+        models,
+        message,
+    })
+}
+
+async fn test_openai_compatible_connection(
+    settings: &ModelSettings,
+) -> Result<ModelConnectionResult, String> {
+    let base_url = if settings.base_url.is_empty() {
+        "https://api.openai.com/v1".to_string()
+    } else {
+        settings.base_url.trim_end_matches('/').to_string()
+    };
+
+    let mut request = reqwest::Client::new().get(format!("{}/models", base_url));
+    if !settings.api_key.is_empty() {
+        request = request.header("Authorization", format!("Bearer {}", settings.api_key));
+    }
+
+    let response = request.send().await;
+    if let Err(e) = response {
+        return Ok(ModelConnectionResult {
+            ok: false,
+            source: "provider".to_string(),
+            models: vec![],
+            message: format!("Failed to connect: {}", e),
+        });
+    }
+
+    let response = response.unwrap();
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Ok(ModelConnectionResult {
+            ok: false,
+            source: "provider".to_string(),
+            models: vec![],
+            message: format!("API returned {}: {}", status, body),
+        });
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = body["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|model| model["id"].as_str().map(String::from))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    Ok(ModelConnectionResult {
+        ok: true,
+        source: "provider".to_string(),
+        message: format!("Connected successfully. Found {} model(s).", models.len()),
+        models,
+    })
 }
 
 #[tauri::command]
@@ -174,7 +524,11 @@ fn main() {
             get_excel_metadata,
             save_to_db,
             test_db_connection,
-            cancel_db_import
+            cancel_db_import,
+            test_model_connection,
+            ai_chat_completion,
+            save_secure_api_key,
+            get_secure_api_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

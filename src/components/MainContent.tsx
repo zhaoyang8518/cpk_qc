@@ -26,6 +26,7 @@ interface MainContentProps {
   activeView: MainView;
   onViewChange: (view: MainView) => void;
   onHeatmapCellSelect: (frequency: number | null, device: string | null) => void;
+  isAiEnabled: boolean;
 }
 
 const emptyIndicators: IndicatorSummary[] = [];
@@ -52,6 +53,7 @@ const MainContent: React.FC<MainContentProps> = ({
   activeView,
   onViewChange,
   onHeatmapCellSelect,
+  isAiEnabled,
 }) => {
   const indicators = currentSheet?.indicators || emptyIndicators;
   const pcbasnList = currentSheet?.pcbasn_list || emptyPcbasnList;
@@ -86,6 +88,7 @@ const MainContent: React.FC<MainContentProps> = ({
             chartTheme={chartTheme}
             lineWidth={lineWidth}
             rfMappings={rfMappings}
+            isAiEnabled={isAiEnabled}
           />
         ) : (
           <RfHeatmap

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { FileSpreadsheet, Settings, Download, LayoutGrid, Loader2 } from "lucide-react";
+import { Bot, FileSpreadsheet, Settings, Download, LayoutGrid, Loader2 } from "lucide-react";
 import { t, useLocale } from "../i18n";
 import { APP_ABBR, APP_NAME, APP_VERSION } from "../appMeta";
 
@@ -21,9 +21,12 @@ interface HeaderProps {
   onGridChange: (cols: number) => void;
   onExport: () => void;
   onOpenSettings: () => void;
+  onOpenAiAssistant: () => void;
   updateState: UpdateState;
   hasDb: boolean;
   onSaveToDb: () => void;
+  isAiEnabled: boolean;
+  isDbEnabled: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -34,9 +37,12 @@ const Header: React.FC<HeaderProps> = ({
   onGridChange,
   onExport,
   onOpenSettings,
+  onOpenAiAssistant,
   updateState,
   hasDb,
   onSaveToDb,
+  isAiEnabled,
+  isDbEnabled,
 }) => {
   const { locale } = useLocale();
   const [appVersion, setAppVersion] = useState(APP_VERSION);
@@ -120,15 +126,29 @@ const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 border-l border-slate-700/60 pl-4">
-          <button
-            onClick={onSaveToDb}
-            disabled={!fileName}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 rounded-lg border border-slate-700 transition-all shadow-sm flex items-center space-x-1.5 px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            title={t("dbSaveToDbTooltip", locale)}
-          >
-            <div className={`w-2 h-2 rounded-full shadow-inner ${hasDb ? "bg-emerald-400 shadow-emerald-400/50" : "bg-slate-600"}`} />
-            <span>{t("dbSaveBtn", locale)}</span>
-          </button>
+          {isAiEnabled && (
+            <button
+              onClick={onOpenAiAssistant}
+              disabled={!fileName}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 rounded-lg border border-slate-700 transition-all shadow-sm flex items-center space-x-1.5 px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              title={locale === "zh" ? "打开 AI 质量报告助手" : "Open AI quality report assistant"}
+            >
+              <Bot className="w-3.5 h-3.5 text-cyan-400" />
+              <span>{locale === "zh" ? "AI 报告" : "AI Report"}</span>
+            </button>
+          )}
+
+          {isDbEnabled && (
+            <button
+              onClick={onSaveToDb}
+              disabled={!fileName}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 rounded-lg border border-slate-700 transition-all shadow-sm flex items-center space-x-1.5 px-3 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              title={t("dbSaveToDbTooltip", locale)}
+            >
+              <div className={`w-2 h-2 rounded-full shadow-inner ${hasDb ? "bg-emerald-400 shadow-emerald-400/50" : "bg-slate-600"}`} />
+              <span>{t("dbSaveBtn", locale)}</span>
+            </button>
+          )}
           
           <button
             onClick={onExport}

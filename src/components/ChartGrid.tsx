@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { IndicatorSummary } from "../types";
-import { FileSpreadsheet, BarChart2, AlertTriangle, Info, Copy, Check, BookOpen, X } from "lucide-react";
+import { FileSpreadsheet, BarChart2, AlertTriangle, Info, Copy, Check, BookOpen, X, Bot, Loader2 } from "lucide-react";
 import CpkChart from "./CpkChart";
 import { calculateSpc } from "../utils/spc";
 import { t, useLocale } from "../i18n";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
 import { CpkLevelTag } from "./CpkLevelTag";
+import { explainIndicatorWithAi } from "../ai/qualityAssistant";
 
 interface ChartGridProps {
   indicators: IndicatorSummary[];
@@ -17,6 +18,7 @@ interface ChartGridProps {
   chartTheme?: string;
   lineWidth?: number;
   rfMappings: RfMappingConfig;
+  isAiEnabled: boolean;
 }
 const ChartGrid: React.FC<ChartGridProps> = ({
   indicators,
@@ -28,12 +30,18 @@ const ChartGrid: React.FC<ChartGridProps> = ({
   chartTheme,
   lineWidth,
   rfMappings,
+  isAiEnabled,
 }) => {
   const { locale } = useLocale();
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: "" });
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   // activeDiagIdx stores the ABSOLUTE indicator index (from indicators[]), not visibleList relative index
   const [activeDiagIdx, setActiveDiagIdx] = useState<number | null>(null);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [aiExplainLoading, setAiExplainLoading] = useState(false);
+  const [aiExplainError, setAiExplainError] = useState("");
+  const [explanationTab, setExplanationTab] = useState<"preview" | "raw">("preview");
+  const [aiCopied, setAiCopied] = useState(false);
 
   // 监听选中检测项变化，实现右侧自动平滑滚动并垂直居中
   useEffect(() => {
@@ -44,6 +52,49 @@ const ChartGrid: React.FC<ChartGridProps> = ({
       }
     }
   }, [selectedIndicatorIdx]);
+
+  useEffect(() => {
+    setAiExplanation(null);
+    setAiExplainError("");
+    setAiExplainLoading(false);
+    setExplanationTab("preview");
+    setAiCopied(false);
+  }, [activeDiagIdx]);
+
+  const handleCopyAiExplanation = (explanation: string) => {
+    navigator.clipboard.writeText(explanation);
+    setAiCopied(true);
+    setToast({ visible: true, message: locale === "zh" ? "已复制 AI 解释到剪切板" : "Copied AI explanation to clipboard" });
+    setTimeout(() => {
+      setAiCopied(false);
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2000);
+  };
+
+  const handleAiExplain = async (indicator: IndicatorSummary) => {
+    setAiExplainLoading(true);
+    setAiExplainError("");
+    try {
+      const result = await explainIndicatorWithAi(
+        {
+          sheet_name: "",
+          raw_sheet_name: "",
+          test_metric_key: "",
+          display_name: "",
+          pcbasn_list: pcbasnList,
+          indicators,
+        },
+        indicator,
+        rfMappings,
+        locale,
+      );
+      setAiExplanation(result);
+    } catch (err) {
+      setAiExplainError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiExplainLoading(false);
+    }
+  };
 
   const handleCopy = (e: React.UIEvent, text: string, idx: number) => {
     e.stopPropagation(); // 避免触发卡片的 onClick (onSelectIndicator)
@@ -254,6 +305,86 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                   </div>
                 </div>
 
+                {isAiEnabled && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-500 dark:text-cyan-400 flex items-center space-x-2">
+                        <span>{locale === "zh" ? "AI 根因解释" : "AI Root-Cause Explanation"}</span>
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        {aiExplanation && (
+                          <>
+                            <div className="flex items-center bg-slate-950/60 p-0.5 rounded-lg border border-slate-800 mr-2">
+                              <button
+                                type="button"
+                                onClick={() => setExplanationTab("preview")}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                  explanationTab === "preview"
+                                    ? "bg-slate-800 text-cyan-400 border border-slate-700/50 shadow-inner"
+                                    : "text-slate-400 hover:text-slate-200"
+                                }`}
+                              >
+                                {locale === "zh" ? "预览" : "Preview"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setExplanationTab("raw")}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                  explanationTab === "raw"
+                                    ? "bg-slate-800 text-cyan-400 border border-slate-700/50 shadow-inner"
+                                    : "text-slate-400 hover:text-slate-200"
+                                }`}
+                              >
+                                Markdown
+                              </button>
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAiExplanation(aiExplanation)}
+                              className="flex items-center space-x-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white transition-all hover:bg-slate-700 mr-2"
+                              title={locale === "zh" ? "复制 Markdown 格式" : "Copy Markdown format"}
+                            >
+                              {aiCopied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                              <span>{locale === "zh" ? "复制" : "Copy"}</span>
+                            </button>
+                          </>
+                        )}
+                        
+                        <button
+                          type="button"
+                          onClick={() => handleAiExplain(ind)}
+                          disabled={aiExplainLoading}
+                          className="flex items-center space-x-1.5 rounded-lg border border-transparent bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm shadow-cyan-600/10 hover:bg-cyan-700 transition-all dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-200 dark:hover:bg-cyan-500/20 dark:shadow-none disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {aiExplainLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+                          <span>{locale === "zh" ? "生成解释" : "Generate"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-xs leading-relaxed text-slate-300">
+                      {!aiExplanation && !aiExplainError && (
+                        <p className="text-slate-400">
+                          {locale === "zh"
+                            ? "AI 会基于上方确定性 CPK/SPC 指标生成工程语言解释，不参与原始计算。"
+                            : "AI will explain the deterministic CPK/SPC facts above in engineering language; it does not perform the underlying calculation."}
+                        </p>
+                      )}
+                      {aiExplainError && <p className="text-rose-300">{aiExplainError}</p>}
+                      {aiExplanation && (
+                        explanationTab === "raw" ? (
+                          <pre className="font-mono text-[10px] whitespace-pre-wrap select-all text-slate-300 max-h-60 overflow-y-auto bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                            {aiExplanation}
+                          </pre>
+                        ) : (
+                          <MarkdownPreview content={aiExplanation} />
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* 4. 统计学理论基准说明 */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
@@ -449,6 +580,148 @@ const ChartGrid: React.FC<ChartGridProps> = ({
       })}
     </div>
   );
+};
+
+interface MarkdownPreviewProps {
+  content: string;
+}
+
+const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content }) => {
+  if (!content) return null;
+
+  const renderInlineMarkdown = (text: string) => {
+    const codeParts = text.split(/`(.*?)`/g);
+    return codeParts.map((codePart, codeIdx) => {
+      if (codeIdx % 2 === 1) {
+        return (
+          <code key={`code-${codeIdx}`} className="px-1 py-0.5 bg-slate-850 rounded font-mono text-[10px] text-cyan-650 dark:text-cyan-300 border border-slate-700 font-medium">
+            {codePart}
+          </code>
+        );
+      }
+      const boldParts = codePart.split(/\*\*(.*?)\*\*/g);
+      return boldParts.map((boldPart, boldIdx) => {
+        if (boldIdx % 2 === 1) {
+          return (
+            <strong key={`bold-${codeIdx}-${boldIdx}`} className="font-bold text-slate-100">
+              {boldPart}
+            </strong>
+          );
+        }
+        return boldPart;
+      });
+    });
+  };
+
+  const lines = content.split("\n");
+  const renderedElements: React.ReactNode[] = [];
+  let listItems: React.ReactNode[] = [];
+  let listType: "ul" | "ol" | null = null;
+
+  const flushList = (key: string | number) => {
+    if (listItems.length > 0) {
+      if (listType === "ul") {
+        renderedElements.push(
+          <ul key={`ul-${key}`} className="list-disc pl-5 mb-3 space-y-1 text-slate-300">
+            {listItems}
+          </ul>
+        );
+      } else {
+        renderedElements.push(
+          <ol key={`ol-${key}`} className="list-decimal pl-5 mb-3 space-y-1 text-slate-300">
+            {listItems}
+          </ol>
+        );
+      }
+      listItems = [];
+      listType = null;
+    }
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    const leadingSpaces = line.length - line.trimStart().length;
+
+    // Horizontal Rule
+    if (trimmed === "---" || trimmed === "***") {
+      flushList(idx);
+      renderedElements.push(<hr key={idx} className="my-4 border-slate-700/60" />);
+      return;
+    }
+
+    // Headers
+    if (trimmed.startsWith("#")) {
+      flushList(idx);
+      const match = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (match) {
+        const level = match[1].length;
+        const text = match[2];
+        const headingClasses =
+          level === 1
+            ? "text-base font-extrabold text-slate-100 mt-5 mb-2.5"
+            : level === 2
+              ? "text-sm font-bold text-slate-200 mt-4 mb-2"
+              : "text-xs font-bold text-cyan-600 dark:text-cyan-400 mt-3.5 mb-1.5 border-l-2 border-cyan-500 pl-2 flex items-center space-x-1.5";
+        renderedElements.push(
+          <div key={idx} className={headingClasses}>
+            {renderInlineMarkdown(text)}
+          </div>
+        );
+        return;
+      }
+    }
+
+    // Unordered List
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      if (listType && listType !== "ul") {
+        flushList(idx);
+      }
+      listType = "ul";
+      const text = trimmed.substring(2);
+      const indentClass = leadingSpaces >= 4 ? "ml-6 list-[circle]" : "ml-2";
+      listItems.push(
+        <li key={idx} className={`text-slate-300 text-xs leading-relaxed ${indentClass}`}>
+          {renderInlineMarkdown(text)}
+        </li>
+      );
+      return;
+    }
+
+    // Ordered List
+    const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      if (listType && listType !== "ol") {
+        flushList(idx);
+      }
+      listType = "ol";
+      const text = olMatch[2];
+      const indentClass = leadingSpaces >= 4 ? "ml-6" : "ml-2";
+      listItems.push(
+        <li key={idx} className={`text-slate-300 text-xs leading-relaxed ${indentClass}`}>
+          {renderInlineMarkdown(text)}
+        </li>
+      );
+      return;
+    }
+
+    // Blank line
+    if (trimmed === "") {
+      flushList(idx);
+      return;
+    }
+
+    // Normal paragraph
+    flushList(idx);
+    renderedElements.push(
+      <p key={idx} className="mb-2 text-xs text-slate-300 leading-relaxed">
+        {renderInlineMarkdown(trimmed)}
+      </p>
+    );
+  });
+
+  flushList("final");
+
+  return <div className="space-y-1">{renderedElements}</div>;
 };
 
 export default ChartGrid;

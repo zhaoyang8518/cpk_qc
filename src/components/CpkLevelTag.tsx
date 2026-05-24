@@ -28,7 +28,7 @@ const statusClasses: Record<CpkStatus, string> = {
 };
 
 const unknownClass =
-  "text-slate-500 bg-slate-100 border-slate-200 shadow-slate-900/5 dark:text-slate-300 dark:bg-slate-700/50 dark:border-slate-500/40 dark:shadow-black/20";
+  "text-slate-300 bg-slate-800 border-slate-700 shadow-sm";
 
 const variantClasses: Record<CpkLevelTagVariant, string> = {
   count: "rounded-md px-2 py-1 text-[10px] font-mono font-bold shadow-sm",
@@ -58,7 +58,7 @@ export const CpkLevelTag: React.FC<CpkLevelTagProps> = ({
         ? isUnknown
           ? unknownClass
           : statusClasses[level]
-        : "bg-slate-100/80 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700/70 opacity-60 shadow-none",
+        : "bg-slate-800/40 text-slate-400 border-slate-700/40 opacity-60 shadow-none",
     onClick && active && "hover:-translate-y-px",
     className
   );

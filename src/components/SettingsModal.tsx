@@ -1,7 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
+  AlertCircle,
+  Bot,
   Building2,
+  Check,
+  ChevronDown,
   Database,
   Layers,
   Palette,
@@ -11,8 +15,17 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Locale, t, useLocale } from "../i18n";
+import {
+  DEFAULT_MODEL_SETTINGS,
+  fallbackModels,
+  loadModelSettings,
+  ModelProvider,
+  ModelSettings,
+  saveModelSettings,
+  testModelConnection,
+} from "../model";
 import { Supplier } from "../types";
 import { DEFAULT_RF_MAPPINGS, RfMappingConfig } from "../utils/rfParser";
 import { useTheme, Theme } from "../theme";
@@ -29,6 +42,9 @@ interface SettingsModalProps {
   onResetRfMappings: () => void;
   postgresUri: string;
   onChangePostgresUri: (uri: string) => void;
+  dbEnabled: boolean;
+  onChangeDbEnabled: (enabled: boolean) => void;
+  onChangeAiEnabled: (enabled: boolean) => void;
   suppliers: Supplier[];
   onChangeSuppliers: (suppliers: Supplier[]) => void;
 }
@@ -40,6 +56,80 @@ const THEMES = [
   { name: "落日霞光", value: "#f97316", bg: "bg-orange-500" },
   { name: "赛博青芒", value: "#06b6d4", bg: "bg-cyan-500" },
 ];
+
+const PROVIDERS: { label: string; value: ModelProvider; i18nKey: "ollama" | "openai" | "custom" }[] = [
+  { label: "Ollama", value: "ollama", i18nKey: "ollama" },
+  { label: "OpenAI", value: "openai", i18nKey: "openai" },
+  { label: "Custom", value: "custom", i18nKey: "custom" },
+];
+
+interface SelectOption {
+  label: string;
+  value: string;
+}
+
+function CustomSelect({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors text-slate-300 flex items-center justify-between"
+      >
+        <span className={selected ? "truncate" : "truncate text-slate-500"}>
+          {selected?.label || placeholder}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute z-20 mt-1 max-h-44 w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 shadow-2xl shadow-black/30">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors ${
+                option.value === value
+                  ? "bg-blue-600/20 text-blue-300"
+                  : "text-slate-300 hover:bg-slate-800"
+              }`}
+            >
+              <span className="truncate">{option.label}</span>
+              {option.value === value && <Check className="w-3.5 h-3.5" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -53,25 +143,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetRfMappings,
   postgresUri,
   onChangePostgresUri,
+  dbEnabled: dbEnabledProp,
+  onChangeDbEnabled,
+  onChangeAiEnabled,
   suppliers,
   onChangeSuppliers,
 }) => {
   const { locale, setLocale } = useLocale();
   const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<
-    "general" | "rfMapping" | "database" | "suppliers"
+    "general" | "aiModel" | "rfMapping" | "database" | "suppliers"
   >("general");
   const [dbStatus, setDbStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle");
   const [dbError, setDbError] = useState("");
 
+  const [dbEnabled, setDbEnabled] = useState(false);
   const [dbHost, setDbHost] = useState("localhost");
   const [dbPort, setDbPort] = useState("5432");
   const [dbUser, setDbUser] = useState("postgres");
   const [dbPassword, setDbPassword] = useState("");
   const [dbName, setDbName] = useState("cpk_db");
   const [supplierDrafts, setSupplierDrafts] = useState<Supplier[]>([]);
+  const [modelSettings, setModelSettings] = useState<ModelSettings>(DEFAULT_MODEL_SETTINGS);
+  const [testingModel, setTestingModel] = useState(false);
+  const [modelTestResult, setModelTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [modelList, setModelList] = useState<string[]>(fallbackModels(DEFAULT_MODEL_SETTINGS.provider));
+  const [isManualModel, setIsManualModel] = useState(false);
 
   const parsePgUri = (uri: string) => {
     const defaults = {
@@ -130,6 +229,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setDbPassword(parsed.password);
         setDbName(parsed.database);
       }
+      setDbEnabled(dbEnabledProp);
       setDbStatus("idle");
       setDbError("");
       setSupplierDrafts(suppliers.length > 0 ? suppliers : [{ supplier_key: "", supplier_name: "" }]);
@@ -143,8 +243,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         setPerAliases(rfMappings.parameters.PER.join(", "));
         setRsiAliases(rfMappings.parameters.RSI.join(", "));
       }
+
+      loadModelSettings().then((loadedSettings) => {
+        setModelSettings(loadedSettings);
+        setIsManualModel(loadedSettings.isManual || false);
+        const defaults = fallbackModels(loadedSettings.provider);
+        setModelList(
+          loadedSettings.model && !defaults.includes(loadedSettings.model)
+            ? [loadedSettings.model, ...defaults]
+            : defaults,
+        );
+        setModelTestResult(null);
+      });
     }
-  }, [isOpen, rfMappings, postgresUri, suppliers]);
+  }, [isOpen, rfMappings, postgresUri, suppliers, dbEnabledProp]);
 
   if (!isOpen) return null;
 
@@ -155,7 +267,41 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       .filter((s) => s.length > 0);
   };
 
-  const handleSave = () => {
+  const updateModelSetting = <K extends keyof ModelSettings>(key: K, value: ModelSettings[K]) => {
+    setModelSettings((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "provider") {
+        const defaults = fallbackModels(value as ModelProvider);
+        setModelList(defaults);
+        setIsManualModel(false);
+        next.model = defaults[0] || "";
+        next.isManual = false;
+      }
+      return next;
+    });
+    setModelTestResult(null);
+  };
+
+  const handleTestModelConnection = async () => {
+    setTestingModel(true);
+    setModelTestResult(null);
+    try {
+      const result = await testModelConnection(modelSettings);
+      setModelTestResult({ ok: result.ok, message: result.message });
+      if (result.ok && result.models.length > 0) {
+        setModelList(result.models);
+        if (!modelSettings.model) {
+          setModelSettings((current) => ({ ...current, model: result.models[0] }));
+        }
+      }
+    } catch (e: any) {
+      setModelTestResult({ ok: false, message: String(e) });
+    } finally {
+      setTestingModel(false);
+    }
+  };
+
+  const handleSave = async () => {
     const newMappings: RfMappingConfig = {
       protocols: {
         BLE: parseAliases(bleAliases),
@@ -171,6 +317,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
     onChangeRfMappings(newMappings);
     onChangePostgresUri(getAssembledUri());
+    onChangeDbEnabled(dbEnabled);
+    await saveModelSettings({ ...modelSettings, isManual: isManualModel });
+    onChangeAiEnabled(modelSettings.enabled);
     const normalizedSuppliers = supplierDrafts
       .map((supplier) => ({
         supplier_key: supplier.supplier_key.trim(),
@@ -224,7 +373,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm select-none animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-700/80 w-[560px] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scaleUp">
+      <div className="bg-slate-900 border border-slate-700/80 w-[720px] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scaleUp">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-800/60 border-b border-slate-700/60">
           <div className="flex items-center space-x-2 text-slate-100">
@@ -266,6 +415,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Layers className="w-3.5 h-3.5" />
             <span>{t("tabRfMapping", locale)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("aiModel")}
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center space-x-1.5 ${
+              activeTab === "aiModel"
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>{t("tabAiModel", locale)}</span>
           </button>
           <button
             type="button"
@@ -419,6 +580,144 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p>{t("spcEngineDesc2", locale)}</p>
               </div>
             </>
+          ) : activeTab === "aiModel" ? (
+            <div className="space-y-5">
+              <div className="flex items-start space-x-3 rounded-xl border border-slate-800 bg-slate-950/30 p-4">
+                <label className="relative inline-flex cursor-pointer items-center pt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={modelSettings.enabled}
+                    onChange={(e) => updateModelSetting("enabled", e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span className="h-5 w-9 rounded-full bg-slate-700 transition-colors peer-checked:bg-blue-600" />
+                  <span className="absolute left-0.5 top-1 h-4 w-4 rounded-full bg-slate-300 transition-transform peer-checked:translate-x-4 peer-checked:bg-white" />
+                </label>
+                <div>
+                  <div className="text-sm font-bold text-slate-200">{t("aiEnabled", locale)}</div>
+                  <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{t("aiEnabledDesc", locale)}</div>
+                </div>
+              </div>
+
+              {modelSettings.enabled && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-300">{t("aiProvider", locale)}</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {PROVIDERS.map((provider) => (
+                        <button
+                          key={provider.value}
+                          type="button"
+                          onClick={() => updateModelSetting("provider", provider.value)}
+                          className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all ${
+                            modelSettings.provider === provider.value
+                              ? "border-blue-500 bg-blue-600/20 text-blue-300 shadow-lg shadow-blue-500/10"
+                              : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                          }`}
+                        >
+                          {t(provider.i18nKey, locale)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">{t("baseUrl", locale)}</label>
+                      <input
+                        type="text"
+                        value={modelSettings.baseUrl}
+                        onChange={(e) => updateModelSetting("baseUrl", e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder={t("baseUrlPlaceholder", locale)}
+                      />
+                      <span className="text-[10px] leading-relaxed text-slate-500">{t("baseUrlHint", locale)}</span>
+                    </div>
+
+                    {modelSettings.provider !== "ollama" && (
+                      <div className="col-span-2 flex flex-col space-y-1.5">
+                        <label className="text-xs font-bold text-slate-300">{t("apiKey", locale)}</label>
+                        <input
+                          type="password"
+                          value={modelSettings.apiKey}
+                          onChange={(e) => updateModelSetting("apiKey", e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                          placeholder={t("apiKeyPlaceholder", locale)}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleTestModelConnection}
+                      disabled={testingModel}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-750 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-medium transition-all shadow-inner flex items-center space-x-2"
+                    >
+                      <Activity className={`w-3.5 h-3.5 ${testingModel ? "animate-spin" : ""}`} />
+                      <span>{testingModel ? t("modelTesting", locale) : t("modelTestConnection", locale)}</span>
+                    </button>
+                    {modelTestResult && (
+                      <div
+                        className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-xs ${
+                          modelTestResult.ok
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                            : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                        }`}
+                      >
+                        {modelTestResult.ok ? (
+                          <Check className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                        )}
+                        <span className="truncate" title={modelTestResult.message}>
+                          {modelTestResult.ok ? t("modelTestSuccess", locale) : modelTestResult.message}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-300">{t("modelSelect", locale)}</label>
+                      <button
+                        type="button"
+                        onClick={() => setIsManualModel((current) => !current)}
+                        className="rounded-md px-2 py-1 text-[11px] font-semibold text-blue-400 transition-colors hover:bg-slate-800 hover:text-blue-300"
+                      >
+                        {isManualModel ? t("modelSelectFromList", locale) : t("modelManualInput", locale)}
+                      </button>
+                    </div>
+                    {isManualModel ? (
+                      <input
+                        type="text"
+                        value={modelSettings.model}
+                        onChange={(e) => updateModelSetting("model", e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder={t("modelManualPlaceholder", locale)}
+                      />
+                    ) : testingModel ? (
+                      <div className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-500">
+                        {t("modelFetching", locale)}
+                      </div>
+                    ) : (
+                      <CustomSelect
+                        value={modelSettings.model}
+                        options={(modelList.includes(modelSettings.model)
+                          ? modelList
+                          : modelSettings.model
+                            ? [modelSettings.model, ...modelList]
+                            : modelList
+                        ).map((model) => ({ label: model, value: model }))}
+                        onChange={(value) => updateModelSetting("model", value)}
+                        placeholder={t("modelSelectPlaceholder", locale)}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           ) : activeTab === "rfMapping" ? (
             <div className="space-y-4">
               <p className="text-xs text-slate-400 leading-relaxed bg-slate-950/30 p-3 rounded-lg border border-slate-800">
@@ -557,105 +856,126 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           ) : activeTab === "database" ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-6 gap-4 pt-2">
-                <div className="col-span-4 flex flex-col space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {t("dbHost", locale)}
-                  </label>
+            <div className="space-y-5">
+              <div className="flex items-start space-x-3 rounded-xl border border-slate-800 bg-slate-950/30 p-4">
+                <label className="relative inline-flex cursor-pointer items-center pt-0.5">
                   <input
-                    type="text"
-                    value={dbHost}
-                    onChange={(e) => setDbHost(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
-                    placeholder="localhost"
+                    type="checkbox"
+                    checked={dbEnabled}
+                    onChange={(e) => setDbEnabled(e.target.checked)}
+                    className="peer sr-only"
                   />
-                </div>
-                <div className="col-span-2 flex flex-col space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {t("dbPort", locale)}
-                  </label>
-                  <input
-                    type="text"
-                    value={dbPort}
-                    onChange={(e) => setDbPort(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
-                    placeholder="5432"
-                  />
-                </div>
-
-                <div className="col-span-3 flex flex-col space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {t("dbUser", locale)}
-                  </label>
-                  <input
-                    type="text"
-                    value={dbUser}
-                    onChange={(e) => setDbUser(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
-                    placeholder="postgres"
-                  />
-                </div>
-                <div className="col-span-3 flex flex-col space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {t("dbPassword", locale)}
-                  </label>
-                  <input
-                    type="password"
-                    value={dbPassword}
-                    onChange={(e) => setDbPassword(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
-                    placeholder={t("dbPasswordPlaceholder", locale)}
-                  />
-                </div>
-
-                <div className="col-span-6 flex flex-col space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">
-                    {t("dbName", locale)}
-                  </label>
-                  <input
-                    type="text"
-                    value={dbName}
-                    onChange={(e) => setDbName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
-                    placeholder="cpk_db"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex flex-col space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 font-mono">
-                  {t("dbUriPreview", locale)}
+                  <span className="h-5 w-9 rounded-full bg-slate-700 transition-colors peer-checked:bg-blue-600" />
+                  <span className="absolute left-0.5 top-1 h-4 w-4 rounded-full bg-slate-300 transition-transform peer-checked:translate-x-4 peer-checked:bg-white" />
                 </label>
-                <div className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-[10px] font-mono text-slate-400 select-all overflow-x-auto whitespace-nowrap">
-                  {getMaskedUri()}
+                <div>
+                  <div className="text-sm font-bold text-slate-200">{t("dbEnabled", locale)}</div>
+                  <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{t("dbEnabledDesc", locale)}</div>
                 </div>
               </div>
 
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={dbStatus === "testing"}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-750 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-medium transition-all shadow-inner flex items-center space-x-2"
-                >
-                  <Activity
-                    className={`w-3.5 h-3.5 ${dbStatus === "testing" ? "animate-spin" : ""}`}
-                  />
-                  <span>
-                    {dbStatus === "testing" ? t("dbTesting", locale) : t("dbTestConnection", locale)}
-                  </span>
-                </button>
-              </div>
+              {dbEnabled && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-6 gap-4 pt-2">
+                    <div className="col-span-4 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("dbHost", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={dbHost}
+                        onChange={(e) => setDbHost(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder="localhost"
+                      />
+                    </div>
+                    <div className="col-span-2 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("dbPort", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={dbPort}
+                        onChange={(e) => setDbPort(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder="5432"
+                      />
+                    </div>
 
-              {dbStatus === "success" && (
-                <div className="text-xs text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 mt-4 font-mono">
-                  {t("dbTestSuccess", locale)}
-                </div>
-              )}
-              {dbStatus === "error" && (
-                <div className="text-xs text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 mt-4 font-mono break-all">
-                  {t("dbTestError", locale)}{dbError}
+                    <div className="col-span-3 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("dbUser", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={dbUser}
+                        onChange={(e) => setDbUser(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder="postgres"
+                      />
+                    </div>
+                    <div className="col-span-3 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("dbPassword", locale)}
+                      </label>
+                      <input
+                        type="password"
+                        value={dbPassword}
+                        onChange={(e) => setDbPassword(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder={t("dbPasswordPlaceholder", locale)}
+                      />
+                    </div>
+
+                    <div className="col-span-6 flex flex-col space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">
+                        {t("dbName", locale)}
+                      </label>
+                      <input
+                        type="text"
+                        value={dbName}
+                        onChange={(e) => setDbName(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs focus:outline-none focus:border-blue-500 transition-colors font-mono text-slate-300"
+                        placeholder="cpk_db"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 font-mono">
+                      {t("dbUriPreview", locale)}
+                    </label>
+                    <div className="w-full px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-[10px] font-mono text-slate-400 select-all overflow-x-auto whitespace-nowrap">
+                      {getMaskedUri()}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={dbStatus === "testing"}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-750 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-medium transition-all shadow-inner flex items-center space-x-2"
+                    >
+                      <Activity
+                        className={`w-3.5 h-3.5 ${dbStatus === "testing" ? "animate-spin" : ""}`}
+                      />
+                      <span>
+                        {dbStatus === "testing" ? t("dbTesting", locale) : t("dbTestConnection", locale)}
+                      </span>
+                    </button>
+                  </div>
+
+                  {dbStatus === "success" && (
+                    <div className="text-xs text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/50 mt-4 font-mono">
+                      {t("dbTestSuccess", locale)}
+                    </div>
+                  )}
+                  {dbStatus === "error" && (
+                    <div className="text-xs text-rose-800 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 mt-4 font-mono break-all">
+                      {t("dbTestError", locale)}{dbError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
