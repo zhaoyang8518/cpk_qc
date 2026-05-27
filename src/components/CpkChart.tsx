@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import * as echarts from "echarts";
 import ReactECharts from "echarts-for-react";
 import { IndicatorSummary } from "../types";
 import { calculateSpc } from "../utils/spc";
@@ -25,17 +26,17 @@ const CpkChart: React.FC<CpkChartProps> = ({
   }, [indicator, pcbasnList, locale]);
 
   const option = useMemo(() => {
-    const { categories, barData, lineData, usl, lsl, bins, status, statusColor, actionTrigger } = spcRes;
+    const { normalCurve, usl, lsl, bins, status, statusColor, actionTrigger } = spcRes;
 
     let highlightBinIdx = -1;
     if (selectedAsn) {
       highlightBinIdx = bins.findIndex((bin) => bin.pcbasnList.includes(selectedAsn));
     }
 
-    const seriesBarData = barData.map((val, idx) => {
+    const seriesBarData = bins.map((bin, idx) => {
       const isHighlighted = idx === highlightBinIdx;
       return {
-        value: val,
+        value: [bin.binMin, bin.binMax, bin.count, idx, isHighlighted ? 1 : 0],
         itemStyle: {
           color: isHighlighted ? "#f59e0b" : chartTheme,
           borderColor: isHighlighted ? "#fbbf24" : chartTheme,
@@ -44,39 +45,33 @@ const CpkChart: React.FC<CpkChartProps> = ({
           shadowColor: "#f59e0b",
           opacity: isHighlighted ? 1 : 0.85,
         },
-        label: {
-          show: isHighlighted || val > 0,
-          position: "top",
-          formatter: isHighlighted ? `{bg|${t("pcbaLoc", locale)}}\n{c}` : "{c}",
-          rich: {
-            bg: {
-              backgroundColor: "#f59e0b",
-              color: "#fff",
-              padding: [2, 4],
-              borderRadius: 4,
-              fontSize: 10,
-              fontWeight: "bold",
-            },
-          },
-        },
       };
     });
 
     const markLineData: any[] = [];
     if (usl !== null && usl !== undefined) {
       markLineData.push({
-        xAxis: usl.toFixed(2),
-        lineStyle: { color: "#ef4444", type: "dashed", width: 1.5 },
-        label: { formatter: `USL: ${usl}`, position: "insideEndTop", color: "#ef4444", fontSize: 10 },
+        xAxis: usl,
+        lineStyle: { color: "#fca5a5", type: "dashed", width: 2.5, opacity: 0.95 },
+        label: { formatter: `USL: ${usl}`, position: "insideEndTop", color: "#fca5a5", fontSize: 10 },
       });
     }
     if (lsl !== null && lsl !== undefined) {
       markLineData.push({
-        xAxis: lsl.toFixed(2),
-        lineStyle: { color: "#ef4444", type: "dashed", width: 1.5 },
-        label: { formatter: `LSL: ${lsl}`, position: "insideStartTop", color: "#ef4444", fontSize: 10 },
+        xAxis: lsl,
+        lineStyle: { color: "#fca5a5", type: "dashed", width: 2.5, opacity: 0.95 },
+        label: { formatter: `LSL: ${lsl}`, position: "insideStartTop", color: "#fca5a5", fontSize: 10 },
       });
     }
+
+    const binMin = bins.length > 0 ? bins[0].binMin : undefined;
+    const binMax = bins.length > 0 ? bins[bins.length - 1].binMax : undefined;
+    const specValues = [lsl, usl].filter((value): value is number => value !== null && value !== undefined);
+    const axisMinValue = Math.min(...[binMin, ...specValues].filter((value): value is number => value !== undefined));
+    const axisMaxValue = Math.max(...[binMax, ...specValues].filter((value): value is number => value !== undefined));
+    const axisPadding = Number.isFinite(axisMaxValue - axisMinValue) ? Math.max((axisMaxValue - axisMinValue) * 0.04, 1e-9) : 0;
+    const xMin = Number.isFinite(axisMinValue) ? axisMinValue - axisPadding : undefined;
+    const xMax = Number.isFinite(axisMaxValue) ? axisMaxValue + axisPadding : undefined;
 
     return {
       grid: {
@@ -101,20 +96,22 @@ const CpkChart: React.FC<CpkChartProps> = ({
           return [size.viewSize[0] - dom.offsetWidth, 0];
         },
         formatter: (params: any[]) => {
-          const bar = params.find((p) => p.seriesType === "bar");
+          const bar = params.find((p) => p.seriesType === "custom");
           const line = params.find((p) => p.seriesType === "line");
-          const bin = bins[bar?.dataIndex || 0];
+          const bin = bins[bar?.value?.[3] ?? bar?.dataIndex ?? 0];
+          const barCount = Array.isArray(bar?.value) ? bar.value[2] : bar?.value;
+          const lineValue = Array.isArray(line?.value) ? line.value[1] : line?.value;
 
           let html = `<div class="font-mono text-xs flex flex-col h-full select-text overflow-hidden">`;
           
           html += `<div class="font-bold border-b border-slate-700 pb-1.5 mb-1.5 flex justify-between items-center flex-shrink-0">`;
-          html += `<span>${t("binCenter", locale)}: ${bar?.name || ""}</span>`;
+          html += `<span>${t("binCenter", locale)}: ${bin?.label || ""}</span>`;
           html += `<span style="color: ${statusColor}; font-size: 10px; border: 1px solid ${statusColor}; padding: 0 4px; border-radius: 4px;">${status}</span>`;
           html += `</div>`;
 
           html += `<div class="flex-shrink-0 space-y-1 mb-1.5">`;
-          if (bar) html += `<div>${t("actualCount", locale)}: <span class="text-blue-400 font-bold">${bar.value}</span></div>`;
-          if (line) html += `<div>${t("normalFit", locale)}: <span class="text-rose-400 font-bold">${line.value}</span></div>`;
+          if (bar) html += `<div>${t("actualCount", locale)}: <span class="text-blue-400 font-bold">${barCount}</span></div>`;
+          if (line) html += `<div>${t("normalFit", locale)}: <span class="text-rose-400 font-bold">${lineValue}</span></div>`;
           html += `</div>`;
 
           if (actionTrigger) {
@@ -139,11 +136,12 @@ const CpkChart: React.FC<CpkChartProps> = ({
         },
       },
       xAxis: {
-        type: "category",
-        data: categories,
+        type: "value",
+        min: xMin,
+        max: xMax,
         axisLine: { lineStyle: { color: "#64748b" } },
-        axisLabel: { color: "#94a3b8", fontSize: 10, rotate: categories.length > 10 ? 30 : 0 },
-        axisTick: { alignWithLabel: true },
+        axisLabel: { color: "#94a3b8", fontSize: 10, formatter: (value: number) => value.toFixed(2) },
+        axisTick: { alignWithLabel: false },
       },
       yAxis: {
         type: "value",
@@ -154,8 +152,70 @@ const CpkChart: React.FC<CpkChartProps> = ({
       series: [
         {
           name: t("actualFreqSeries", locale),
-          type: "bar",
-          barCategoryGap: "2%",
+          type: "custom",
+          renderItem: (params: any, api: any) => {
+            const binMin = api.value(0);
+            const binMax = api.value(1);
+            const count = api.value(2);
+            const isHighlighted = api.value(4) === 1;
+            const start = api.coord([binMin, 0]);
+            const end = api.coord([binMax, count]);
+            const zero = api.coord([binMax, 0]);
+            const width = Math.max(1, zero[0] - start[0] - 1);
+            const height = Math.max(0, zero[1] - end[1]);
+            const rectShape = echarts.graphic.clipRectByRect(
+              {
+                x: start[0] + 0.5,
+                y: end[1],
+                width,
+                height,
+              },
+              {
+                x: params.coordSys.x,
+                y: params.coordSys.y,
+                width: params.coordSys.width,
+                height: params.coordSys.height,
+              }
+            );
+
+            if (!rectShape) return null;
+
+            const children: any[] = [
+              {
+                type: "rect",
+                shape: rectShape,
+                style: {
+                  fill: isHighlighted ? "#f59e0b" : chartTheme,
+                  stroke: isHighlighted ? "#fbbf24" : chartTheme,
+                  lineWidth: isHighlighted ? 2 : 1,
+                  opacity: isHighlighted ? 1 : 0.85,
+                  shadowBlur: isHighlighted ? 12 : 0,
+                  shadowColor: "#f59e0b",
+                },
+              },
+            ];
+
+            if (count > 0 && rectShape.width > 8) {
+              children.push({
+                type: "text",
+                style: {
+                  text: isHighlighted ? `${t("pcbaLoc", locale)}\n${count}` : String(count),
+                  x: rectShape.x + rectShape.width / 2,
+                  y: rectShape.y - 4,
+                  fill: isHighlighted ? "#fbbf24" : "#cbd5e1",
+                  fontSize: 10,
+                  fontWeight: isHighlighted ? "bold" : "normal",
+                  align: "center",
+                  verticalAlign: "bottom",
+                },
+              });
+            }
+
+            return {
+              type: "group",
+              children,
+            };
+          },
           data: seriesBarData,
           animationDuration: 800,
         },
@@ -165,8 +225,8 @@ const CpkChart: React.FC<CpkChartProps> = ({
           smooth: true,
           symbol: "none",
           lineStyle: { color: "#ee6666", width: lineWidth, shadowColor: "rgba(238, 102, 102, 0.3)", shadowBlur: 8 },
-          data: lineData,
-          markLine: markLineData.length > 0 ? { symbol: "none", data: markLineData } : undefined,
+          data: normalCurve.map((point) => [point.x, parseFloat(point.y.toFixed(2))]),
+          markLine: markLineData.length > 0 ? { symbol: "none", data: markLineData, silent: true } : undefined,
           animationDuration: 1000,
         },
       ],

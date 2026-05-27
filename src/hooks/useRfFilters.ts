@@ -74,7 +74,14 @@ export const useRfFilters = (currentSheet: SheetData | null, rfMappings: RfMappi
       }
     });
 
-    return Array.from(rates).sort();
+    return Array.from(rates).sort((a, b) => {
+      const aNum = Number(a);
+      const bNum = Number(b);
+      if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+        return aNum - bNum;
+      }
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }, [currentSheet, selectedDevices, selectedFrequencies, rfMappings]);
 
   const handleDeviceChange = (devices: string[]) => {

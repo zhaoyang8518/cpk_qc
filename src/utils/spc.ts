@@ -110,7 +110,7 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
     }
   }
 
-  // 4. 六西格玛 X 轴范围动态划定算法 (严格遵守规则 2)
+  // 4. 直方图 X 轴范围围绕实际分布，避免规格上下限过宽时压扁柱形。
   if (N === 0) {
     return {
       bins: [],
@@ -132,18 +132,25 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
     };
   }
 
-  const buffer = 1.5 * sigma; // 缓冲值取 1.5 Sigma
-  let xMin = lsl !== null ? Math.min(lsl, mu - 3 * sigma) - buffer : mu - 3 * sigma - buffer;
-  let xMax = usl !== null ? Math.max(usl, mu + 3 * sigma) + buffer : mu + 3 * sigma + buffer;
+  const observedMin = Math.min(...values);
+  const observedMax = Math.max(...values);
+  const statisticalMin = sigma > 1e-9 ? mu - 3 * sigma : observedMin;
+  const statisticalMax = sigma > 1e-9 ? mu + 3 * sigma : observedMax;
+  const distributionMin = Math.min(observedMin, statisticalMin);
+  const distributionMax = Math.max(observedMax, statisticalMax);
+  const distributionRange = distributionMax - distributionMin;
+  const buffer = Math.max(distributionRange * 0.04, sigma * 0.35, 1e-9);
+  let xMin = distributionMin - buffer;
+  let xMax = distributionMax + buffer;
 
-  // 异常保护：若数据完全一致或没有规格
+  // 异常保护：若数据完全一致
   if (xMin === xMax) {
     xMin -= 0.5;
     xMax += 0.5;
   }
 
-  // 5. 直方图分箱算法 (Sturges 规则)
-  const K = Math.max(6, Math.ceil(1 + 3.322 * Math.log10(N)));
+  // 5. 直方图分箱算法：比 Sturges 更细，N=100 时约 18 个柱，接近 Excel 常见输出。
+  const K = Math.min(36, Math.max(10, Math.ceil(Math.sqrt(N) * 1.8)));
   const binWidth = (xMax - xMin) / K;
 
   const bins: BinData[] = [];
@@ -172,8 +179,10 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
   // 统计频数与单板归属
   values.forEach((val, idx) => {
     const asn = pcbasnList[idx] || `UNKNOWN-${idx}`;
-    for (const bin of bins) {
-      if (val >= bin.binMin && val < bin.binMax) {
+    for (let binIdx = 0; binIdx < bins.length; binIdx++) {
+      const bin = bins[binIdx];
+      const isLastBin = binIdx === bins.length - 1;
+      if (val >= bin.binMin && (val < bin.binMax || (isLastBin && val <= bin.binMax))) {
         bin.count++;
         bin.pcbasnList.push(asn);
         bin.pcbaItems.push({ asn, val });
