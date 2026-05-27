@@ -7,13 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-
-env:
-  RELEASE_OWNER: zhaoyang8518
-  RELEASE_REPO: tools-releases
-  RELEASE_TAG: cpk-qc-latest
-  RELEASE_NAME: CPK Quality Control Latest
+  contents: write
 
 jobs:
   build-windows:
@@ -49,20 +43,15 @@ jobs:
       - name: Build, sign, and upload Windows release assets
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.TOOLS_RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ./src-tauri
-          owner: ${{ env.RELEASE_OWNER }}
-          repo: ${{ env.RELEASE_REPO }}
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: ${{ env.RELEASE_NAME }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'cpk_qc ${{ github.ref_name }}'
           releaseBody: |
-            Latest OTA release for CPK Quality Control.
-
-            Source tag: ${{ github.ref_name }}
-          releaseCommitish: main
+            Automated release for CPK Quality Control ${{ github.ref_name }}.
           releaseDraft: false
           prerelease: false
           updaterJsonPreferNsis: true
@@ -97,20 +86,15 @@ jobs:
       - name: Build, sign, and upload macOS release assets
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.TOOLS_RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ./src-tauri
-          owner: ${{ env.RELEASE_OWNER }}
-          repo: ${{ env.RELEASE_REPO }}
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: ${{ env.RELEASE_NAME }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'cpk_qc ${{ github.ref_name }}'
           releaseBody: |
-            Latest OTA release for CPK Quality Control.
-
-            Source tag: ${{ github.ref_name }}
-          releaseCommitish: main
+            Automated release for CPK Quality Control ${{ github.ref_name }}.
           releaseDraft: false
           prerelease: false
           updaterJsonPreferNsis: true
