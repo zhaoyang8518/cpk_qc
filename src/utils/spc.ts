@@ -9,6 +9,7 @@ export interface BinData {
   count: number;
   pcbasnList: string[]; // 落在该分箱内的单板条码列表
   pcbaItems: { asn: string; val: number }[]; // 落在该分箱内的单板条码与具体数值对
+  normalCount: number; // 该分箱中心点对应的正态拟合值 (用作 tooltip 显示)
 }
 
 export interface SpcCalculationResult {
@@ -30,12 +31,36 @@ export interface SpcCalculationResult {
   cpAlert: boolean; // Cp < 1.0 警报
 }
 
+export type HistogramBinPrecision = "coarse" | "standard" | "fine";
+
+export const DEFAULT_HISTOGRAM_BIN_PRECISION: HistogramBinPrecision = "fine";
+
+interface SpcCalculationOptions {
+  binPrecision?: HistogramBinPrecision;
+}
+
+function getBinCount(sampleSize: number, precision: HistogramBinPrecision): number {
+  const configs: Record<HistogramBinPrecision, { min: number; multiplier: number; max: number }> = {
+    coarse: { min: 10, multiplier: 1.8, max: 36 },
+    standard: { min: 12, multiplier: 2.4, max: 60 },
+    fine: { min: 16, multiplier: 3.0, max: 80 },
+  };
+  const config = configs[precision];
+  return Math.min(config.max, Math.max(config.min, Math.ceil(Math.sqrt(sampleSize) * config.multiplier)));
+}
+
 /**
  * 严格遵循六西格玛 (Six Sigma) 标准的 SPC 统计算法与分箱引擎
  */
-export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], locale: Locale = "en"): SpcCalculationResult {
+export function calculateSpc(
+  indicator: IndicatorSummary,
+  pcbasnList: string[],
+  locale: Locale = "en",
+  options: SpcCalculationOptions = {},
+): SpcCalculationResult {
   const values = indicator.values || [];
   const N = values.length;
+  const binPrecision = options.binPrecision ?? DEFAULT_HISTOGRAM_BIN_PRECISION;
 
   // 1. 获取或计算均值 (mu) 与标准差 (sigma)
   let mu = indicator.average;
@@ -149,8 +174,8 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
     xMax += 0.5;
   }
 
-  // 5. 直方图分箱算法：比 Sturges 更细，N=100 时约 18 个柱，接近 Excel 常见输出。
-  const K = Math.min(36, Math.max(10, Math.ceil(Math.sqrt(N) * 1.8)));
+  // 5. 直方图分箱算法：按用户配置控制颗粒度，默认使用细颗粒度以保留工程追溯细节。
+  const K = getBinCount(N, binPrecision);
   const binWidth = (xMax - xMin) / K;
 
   const bins: BinData[] = [];
@@ -158,11 +183,20 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
   const barData: number[] = [];
   const lineData: number[] = [];
 
+  const areaScale = N * binWidth;
+
   for (let i = 0; i < K; i++) {
     const bMin = xMin + i * binWidth;
     const bMax = bMin + binWidth;
     const bCenter = (bMin + bMax) / 2;
     const label = bCenter.toFixed(2);
+
+    let normalCount = 0;
+    if (sigma > 1e-9) {
+      const exponent = -0.5 * Math.pow((bCenter - mu) / sigma, 2);
+      const pdf = (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+      normalCount = parseFloat((areaScale * pdf).toFixed(2));
+    }
 
     bins.push({
       binMin: bMin,
@@ -172,6 +206,7 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
       count: 0,
       pcbasnList: [],
       pcbaItems: [],
+      normalCount,
     });
     categories.push(label);
   }
@@ -193,20 +228,24 @@ export function calculateSpc(indicator: IndicatorSummary, pcbasnList: string[], 
 
   bins.forEach((bin) => barData.push(bin.count));
 
-  // 6. 正态拟合曲线计算 (PDF 乘以 N * binWidth 进行量级对齐)
+  // 6. 正态拟合曲线计算 (采用100个高精度采样点，确保曲线完美平滑，解耦柱子采样)
   const normalCurve: { x: number; y: number }[] = [];
-  const areaScale = N * binWidth;
+  const curvePointsCount = 100;
 
-  bins.forEach((bin) => {
-    const x = bin.binCenter;
+  for (let i = 0; i <= curvePointsCount; i++) {
+    const x = xMin + (i / curvePointsCount) * (xMax - xMin);
     let y = 0;
     if (sigma > 1e-9) {
       const exponent = -0.5 * Math.pow((x - mu) / sigma, 2);
       const pdf = (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
       y = areaScale * pdf;
     }
-    lineData.push(parseFloat(y.toFixed(2)));
-    normalCurve.push({ x, y });
+    normalCurve.push({ x, y: parseFloat(y.toFixed(2)) });
+  }
+
+  // 填充原 lineData 用于向后兼容（以 binCenter 采样的拟合值）
+  bins.forEach((bin) => {
+    lineData.push(bin.normalCount);
   });
 
   return {

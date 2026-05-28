@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import * as echarts from "echarts";
 import ReactECharts from "echarts-for-react";
 import { IndicatorSummary } from "../types";
-import { calculateSpc } from "../utils/spc";
+import { calculateSpc, HistogramBinPrecision } from "../utils/spc";
 import { t, useLocale } from "../i18n";
 
 interface CpkChartProps {
@@ -11,6 +11,7 @@ interface CpkChartProps {
   selectedAsn: string | null;
   chartTheme?: string;
   lineWidth?: number;
+  binPrecision?: HistogramBinPrecision;
 }
 
 const CpkChart: React.FC<CpkChartProps> = ({
@@ -19,14 +20,15 @@ const CpkChart: React.FC<CpkChartProps> = ({
   selectedAsn,
   chartTheme = "#5470c6",
   lineWidth = 2.5,
+  binPrecision,
 }) => {
   const { locale } = useLocale();
   const spcRes = useMemo(() => {
-    return calculateSpc(indicator, pcbasnList, locale);
-  }, [indicator, pcbasnList, locale]);
+    return calculateSpc(indicator, pcbasnList, locale, { binPrecision });
+  }, [indicator, pcbasnList, locale, binPrecision]);
 
   const option = useMemo(() => {
-    const { normalCurve, usl, lsl, bins, status, statusColor, actionTrigger } = spcRes;
+    const { normalCurve, usl, lsl, bins, status, statusColor } = spcRes;
 
     let highlightBinIdx = -1;
     if (selectedAsn) {
@@ -82,10 +84,9 @@ const CpkChart: React.FC<CpkChartProps> = ({
         containLabel: true,
       },
       tooltip: {
-        trigger: "axis",
+        trigger: "item",
         triggerOn: "click",
         enterable: true,
-        axisPointer: { type: "shadow" },
         backgroundColor: "rgba(30, 41, 59, 0.95)",
         borderColor: statusColor,
         borderWidth: 1,
@@ -95,12 +96,11 @@ const CpkChart: React.FC<CpkChartProps> = ({
           // 顶部、右侧、底部与统计图的顶边、右边、底边完美对齐 (占据右侧整块面板)
           return [size.viewSize[0] - dom.offsetWidth, 0];
         },
-        formatter: (params: any[]) => {
-          const bar = params.find((p) => p.seriesType === "custom");
-          const line = params.find((p) => p.seriesType === "line");
+        formatter: (params: any) => {
+          const bar = Array.isArray(params) ? params.find((p) => p.seriesType === "custom") : params;
           const bin = bins[bar?.value?.[3] ?? bar?.dataIndex ?? 0];
           const barCount = Array.isArray(bar?.value) ? bar.value[2] : bar?.value;
-          const lineValue = Array.isArray(line?.value) ? line.value[1] : line?.value;
+          const lineValue = bin?.normalCount;
 
           let html = `<div class="font-mono text-xs flex flex-col h-full select-text overflow-hidden">`;
           
@@ -111,14 +111,8 @@ const CpkChart: React.FC<CpkChartProps> = ({
 
           html += `<div class="flex-shrink-0 space-y-1 mb-1.5">`;
           if (bar) html += `<div>${t("actualCount", locale)}: <span class="text-blue-400 font-bold">${barCount}</span></div>`;
-          if (line) html += `<div>${t("normalFit", locale)}: <span class="text-rose-400 font-bold">${lineValue}</span></div>`;
+          if (lineValue !== undefined && lineValue !== null) html += `<div>${t("normalFit", locale)}: <span class="text-rose-400 font-bold">${lineValue}</span></div>`;
           html += `</div>`;
-
-          if (actionTrigger) {
-            html += `<div class="flex-shrink-0 my-1 pt-1 border-t border-slate-700 text-[10px] text-amber-300 bg-amber-500/10 p-1.5 rounded border border-amber-500/20 whitespace-normal">`;
-            html += `💡 ${actionTrigger}`;
-            html += `</div>`;
-          }
 
           if (bin?.pcbaItems && bin.pcbaItems.length > 0) {
             html += `<div class="flex-1 overflow-y-auto mt-1.5 pt-1.5 border-t border-slate-700 text-[10px] text-slate-400 pr-1 pointer-events-auto select-text">`;
@@ -163,6 +157,20 @@ const CpkChart: React.FC<CpkChartProps> = ({
             const zero = api.coord([binMax, 0]);
             const width = Math.max(1, zero[0] - start[0] - 1);
             const height = Math.max(0, zero[1] - end[1]);
+            const hitShape = echarts.graphic.clipRectByRect(
+              {
+                x: start[0],
+                y: params.coordSys.y,
+                width: Math.max(1, zero[0] - start[0]),
+                height: params.coordSys.height,
+              },
+              {
+                x: params.coordSys.x,
+                y: params.coordSys.y,
+                width: params.coordSys.width,
+                height: params.coordSys.height,
+              }
+            );
             const rectShape = echarts.graphic.clipRectByRect(
               {
                 x: start[0] + 0.5,
@@ -181,6 +189,18 @@ const CpkChart: React.FC<CpkChartProps> = ({
             if (!rectShape) return null;
 
             const children: any[] = [
+              ...(hitShape
+                ? [
+                    {
+                      type: "rect",
+                      shape: hitShape,
+                      style: {
+                        fill: "rgba(0, 0, 0, 0)",
+                      },
+                      cursor: "pointer",
+                    },
+                  ]
+                : []),
               {
                 type: "rect",
                 shape: rectShape,
@@ -218,16 +238,20 @@ const CpkChart: React.FC<CpkChartProps> = ({
           },
           data: seriesBarData,
           animationDuration: 800,
+          z: 3,
         },
         {
           name: t("normalCurveSeries", locale),
           type: "line",
           smooth: true,
+          silent: true, // 使曲线不阻挡鼠标悬浮和点击事件，点击能够直达下方的柱子
           symbol: "none",
           lineStyle: { color: "#ee6666", width: lineWidth, shadowColor: "rgba(238, 102, 102, 0.3)", shadowBlur: 8 },
           data: normalCurve.map((point) => [point.x, parseFloat(point.y.toFixed(2))]),
           markLine: markLineData.length > 0 ? { symbol: "none", data: markLineData, silent: true } : undefined,
           animationDuration: 1000,
+          tooltip: { show: false },
+          z: 2,
         },
       ],
     };

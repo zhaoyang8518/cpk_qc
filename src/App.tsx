@@ -16,7 +16,8 @@ import ExportProgressModal, { ExportProgressState } from "./components/ExportPro
 import { t, Locale, LocaleProvider } from "./i18n";
 import { RfMappingConfig, DEFAULT_RF_MAPPINGS, mergeRfMappingsWithDefaults, parseRFIndicator } from "./utils/rfParser";
 import { getCpkStatus } from "./utils/cpk";
-import { matchesRfDeviceFilter } from "./utils/rfFilters";
+import { getRfHeatmapBandLabel } from "./utils/rfHeatmap";
+import { DEFAULT_HISTOGRAM_BIN_PRECISION, HistogramBinPrecision } from "./utils/spc";
 import { useResizableSidebar } from "./hooks/useResizableSidebar";
 import { useRfFilters } from "./hooks/useRfFilters";
 import { usePdfExport } from "./hooks/usePdfExport";
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   const [fullFilePath, setFullFilePath] = useState<string>("");
   const [chartTheme, setChartTheme] = useState<string>("#5470c6");
   const [lineWidth, setLineWidth] = useState<number>(2.5);
+  const [binPrecision, setBinPrecision] = useState<HistogramBinPrecision>(DEFAULT_HISTOGRAM_BIN_PRECISION);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const updateState = useAutoUpdater(locale);
@@ -95,18 +97,27 @@ const App: React.FC = () => {
   const { sidebarWidth, startResizing } = useResizableSidebar();
   const {
     selectedDevices,
+    selectedBands,
     selectedFrequencies,
+    selectedBandwidths,
     selectedRates,
+    selectedChannels,
     activeView,
-    setSelectedRates,
     setActiveView,
     resetRfFilters,
     resetRfView,
     deviceOptions,
+    availableBands,
     availableFrequencies,
+    availableBandwidths,
     availableRates,
+    availableChannels,
     handleDeviceChange,
+    handleBandChange,
     handleFrequencyChange,
+    handleBandwidthChange,
+    handleRateChange,
+    handleChannelChange,
     selectHeatmapCell,
   } = useRfFilters(currentSheet, rfMappings);
   const { exportProgress, handleExport } = usePdfExport({
@@ -299,15 +310,30 @@ const App: React.FC = () => {
           indicator.name.toLowerCase().includes(query) ||
           parsed.displayName.toLowerCase().includes(query);
 
-        const matchesDevice = matchesRfDeviceFilter(parsed, selectedDevices);
+        const matchesDevice = selectedDevices.length === 0 || selectedDevices.includes(parsed.protocol);
+        const matchesBand =
+          selectedBands.length === 0 ||
+          (parsed.frequency !== null && selectedBands.includes(getRfHeatmapBandLabel(parsed.frequency, parsed.protocol)));
         const matchesFreq =
           selectedFrequencies.length === 0 ||
           (parsed.frequency !== null && selectedFrequencies.includes(parsed.frequency));
+        const matchesBandwidth = selectedBandwidths.length === 0 || selectedBandwidths.includes(parsed.bandwidth);
         const matchesRate = selectedRates.length === 0 || selectedRates.includes(parsed.rate);
+        const matchesChannel = selectedChannels.length === 0 || selectedChannels.includes(parsed.chain);
 
-        return matchesSearch && matchesDevice && matchesFreq && matchesRate;
+        return matchesSearch && matchesDevice && matchesBand && matchesFreq && matchesBandwidth && matchesRate && matchesChannel;
       });
-  }, [currentSheet?.indicators, indicatorSearchQuery, selectedDevices, selectedFrequencies, selectedRates, rfMappings]);
+  }, [
+    currentSheet?.indicators,
+    indicatorSearchQuery,
+    selectedDevices,
+    selectedBands,
+    selectedFrequencies,
+    selectedBandwidths,
+    selectedRates,
+    selectedChannels,
+    rfMappings,
+  ]);
 
   const visibleIndicators = useMemo(
     () => rfFilteredIndicators.filter(({ indicator }) => enabledCpkStatuses.has(getCpkStatus(indicator.cpk))),
@@ -375,7 +401,7 @@ const App: React.FC = () => {
         />
 
         <div className="flex flex-1 overflow-hidden relative">
-          {isSidebarCollapsed ? (
+          {activeView === "grid" && (isSidebarCollapsed ? (
             <div className="flex h-full w-6 shrink-0 items-start justify-center border-r border-slate-700/50 bg-slate-900/80 pt-4">
               <button
                 type="button"
@@ -427,7 +453,7 @@ const App: React.FC = () => {
                 </button>
               </div>
             </>
-          )}
+          ))}
 
           <MainContent
             currentSheet={currentSheet}
@@ -437,16 +463,26 @@ const App: React.FC = () => {
             onSelectIndicator={setSelectedIndicatorIdx}
             chartTheme={chartTheme}
             lineWidth={lineWidth}
+            binPrecision={binPrecision}
             rfMappings={rfMappings}
             deviceOptions={deviceOptions}
             selectedDevices={selectedDevices}
             onDeviceChange={handleDeviceChange}
+            availableBands={availableBands}
+            selectedBands={selectedBands}
+            onBandChange={handleBandChange}
             availableFrequencies={availableFrequencies}
             selectedFrequencies={selectedFrequencies}
             onFrequencyChange={handleFrequencyChange}
+            availableBandwidths={availableBandwidths}
+            selectedBandwidths={selectedBandwidths}
+            onBandwidthChange={handleBandwidthChange}
             availableRates={availableRates}
             selectedRates={selectedRates}
-            onRateChange={setSelectedRates}
+            onRateChange={handleRateChange}
+            availableChannels={availableChannels}
+            selectedChannels={selectedChannels}
+            onChannelChange={handleChannelChange}
             activeView={activeView}
             onViewChange={setActiveView}
             onHeatmapCellSelect={selectHeatmapCell}
@@ -470,7 +506,7 @@ const App: React.FC = () => {
           onSheetChange={(idx) => {
             setActiveSheetIdx(idx);
             setSelectedIndicatorIdx(null);
-            resetRfView();
+            resetRfFilters();
           }}
         />
 
@@ -482,6 +518,8 @@ const App: React.FC = () => {
           onChangeTheme={setChartTheme}
           lineWidth={lineWidth}
           onChangeLineWidth={setLineWidth}
+          binPrecision={binPrecision}
+          onChangeBinPrecision={setBinPrecision}
           rfMappings={rfMappings}
           onChangeRfMappings={handleRfMappingsChange}
           onResetRfMappings={handleRfMappingsReset}

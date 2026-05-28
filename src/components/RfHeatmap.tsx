@@ -1,14 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Activity, AlertTriangle, Check, ChevronDown, Circle, RadioTower, Search, SlidersHorizontal, Target, MoreHorizontal } from "lucide-react";
-import { IndicatorSummary } from "../types";
+import React, { useMemo, useState } from "react";
+import { Activity, AlertTriangle, Circle, RadioTower, SlidersHorizontal, Target, MoreHorizontal } from "lucide-react";
+import { IndicatorSummary, RfHeatmapFilters } from "../types";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
-import { RF_TYPE_LABELS } from "../utils/rfFilters";
+import { getRfHeatmapBandLabel, getRfHeatmapBandSortIndex, getRfHeatmapTypeLabel } from "../utils/rfHeatmap";
 import { t, useLocale } from "../i18n";
 
 interface RfHeatmapProps {
   indicators: IndicatorSummary[];
   pcbasnList: string[];
   rfMappings: RfMappingConfig;
+  filters: RfHeatmapFilters;
+  selectedDevices: string[];
+  selectedBands: string[];
+  selectedFrequencies: number[];
+  selectedBandwidths: string[];
+  selectedRates: string[];
+  selectedChannels: string[];
   onSelectCell: (freq: number | null, deviceVal: string | null) => void;
 }
 
@@ -37,23 +44,6 @@ interface SelectedCell {
   rowIdx: number;
   indicatorName: string;
 }
-
-const BAND_ORDER = ["2G", "5G", "6G", "Other"];
-
-const getBandLabel = (frequency: number | null, protocol: string) => {
-  if (protocol === "BLE") return "2G";
-  if (frequency === null) return "Other";
-  if (frequency >= 2400 && frequency < 2500) return "2G";
-  if (frequency >= 4900 && frequency < 5925) return "5G";
-  if (frequency >= 5925 && frequency <= 7125) return "6G";
-  const ghz = Math.floor(frequency / 1000);
-  return ghz > 0 ? `${ghz}G` : "Other";
-};
-
-const getBandSortIndex = (band: string) => {
-  const index = BAND_ORDER.indexOf(band);
-  return index === -1 ? BAND_ORDER.length : index;
-};
 
 const getCellTone = (value: number | null, column: MatrixColumn): MatrixCell => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -276,87 +266,8 @@ const compactTitle = (column: MatrixColumn) => {
 };
 
 const fullTitle = (column: MatrixColumn) => {
-  const type = RF_TYPE_LABELS[column.parsed.testType] || column.parsed.testType;
+  const type = getRfHeatmapTypeLabel(column.parsed.testType);
   return `${type} | ${column.parsed.displayName}`;
-};
-
-const SelectControl = ({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
-
-  const displayValue = value === "All" ? label : value;
-
-  return (
-    <div ref={rootRef} className="relative w-28">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="flex h-9 w-full items-center rounded-2xl border border-slate-600/70 bg-slate-950/60 px-3 text-left text-xs text-slate-200 shadow-inner transition-colors hover:border-slate-500 focus:border-blue-500/80 focus:outline-none"
-        title={`${label}: ${value}`}
-      >
-        <span className={`min-w-0 flex-1 truncate ${value === "All" ? "text-slate-500" : "text-slate-200"}`}>
-          {displayValue}
-        </span>
-        <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute left-0 top-10 z-50 w-40 overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950 shadow-2xl shadow-black/40">
-          <div className="border-b border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-            {label}
-          </div>
-          <div className="max-h-64 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-            {options.map((option) => {
-              const isSelected = option === value;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    onChange(option);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                    isSelected ? "bg-blue-500/15 text-blue-200" : "text-slate-300 hover:bg-slate-800/80 hover:text-slate-100"
-                  }`}
-                >
-                  <span
-                    className={`mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                      isSelected ? "border-blue-400 bg-blue-500 text-white" : "border-slate-600 bg-slate-900"
-                    }`}
-                  >
-                    {isSelected && <Check className="h-3 w-3" />}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{option}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 };
 
 const Metric = ({ label, value, accent }: { label: string; value: string; accent: string }) => (
@@ -390,18 +301,17 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
   indicators,
   pcbasnList,
   rfMappings,
+  filters,
+  selectedDevices,
+  selectedBands,
+  selectedFrequencies,
+  selectedBandwidths,
+  selectedRates,
+  selectedChannels,
   onSelectCell,
 }) => {
   const { locale } = useLocale();
-  const [selectedBand, setSelectedBand] = useState<string>("All");
-  const [selectedType, setSelectedType] = useState<string>("All");
-  const [selectedModulation, setSelectedModulation] = useState<string>("All");
-  const [selectedChain, setSelectedChain] = useState<string>("All");
-  const [selectedFrequency, setSelectedFrequency] = useState<string>("All");
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
-  const [query, setQuery] = useState("");
-  const [showValues, setShowValues] = useState<boolean>(true);
-  const [sortByWorstCpk, setSortByWorstCpk] = useState<boolean>(false);
 
   const matrix = useMemo(() => {
     const columns: MatrixColumn[] = indicators
@@ -425,19 +335,13 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       .filter((column) => column.parsed.frequency !== null)
       .sort((a, b) => {
         const bandDiff =
-          getBandSortIndex(getBandLabel(a.parsed.frequency, a.parsed.protocol)) -
-          getBandSortIndex(getBandLabel(b.parsed.frequency, b.parsed.protocol));
+          getRfHeatmapBandSortIndex(getRfHeatmapBandLabel(a.parsed.frequency, a.parsed.protocol)) -
+          getRfHeatmapBandSortIndex(getRfHeatmapBandLabel(b.parsed.frequency, b.parsed.protocol));
         if (bandDiff !== 0) return bandDiff;
         if ((a.parsed.frequency || 0) !== (b.parsed.frequency || 0)) {
           return (a.parsed.frequency || 0) - (b.parsed.frequency || 0);
         }
         return compactTitle(a).localeCompare(compactTitle(b), undefined, { numeric: true });
-      });
-
-    const bands = Array.from(new Set(columns.map((column) => getBandLabel(column.parsed.frequency, column.parsed.protocol))))
-      .sort((a, b) => {
-        const orderDiff = getBandSortIndex(a) - getBandSortIndex(b);
-        return orderDiff !== 0 ? orderDiff : a.localeCompare(b, undefined, { numeric: true });
       });
 
     const rows = pcbasnList.map((sn, rowIdx) => {
@@ -453,38 +357,22 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       return { sn, rowIdx, riskScore, warningCount, failCount };
     });
 
-    const types = Array.from(new Set(columns.map((column) => RF_TYPE_LABELS[column.parsed.testType] || column.parsed.testType))).sort();
-    const modulations = Array.from(new Set(columns.map((column) => column.parsed.rate).filter(Boolean))).sort((a, b) => {
-      const aNum = Number(a);
-      const bNum = Number(b);
-      if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
-      return a.localeCompare(b, undefined, { numeric: true });
-    });
-    const chains = Array.from(new Set(columns.map((column) => column.parsed.chain).filter(Boolean))).sort();
-    const frequencies = Array.from(new Set(columns.map((column) => column.parsed.frequency).filter((value): value is number => value !== null))).sort((a, b) => a - b);
-
-    return { columns, bands, rows, types, modulations, chains, frequencies };
+    return { columns, rows };
   }, [indicators, pcbasnList, rfMappings]);
 
   const visibleColumns = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     const filtered = matrix.columns.filter((column) => {
-      const band = getBandLabel(column.parsed.frequency, column.parsed.protocol);
-      if (selectedBand !== "All" && band !== selectedBand) return false;
-      const typeLabel = RF_TYPE_LABELS[column.parsed.testType] || column.parsed.testType;
-      if (selectedType !== "All" && typeLabel !== selectedType) return false;
-      if (selectedModulation !== "All" && column.parsed.rate !== selectedModulation) return false;
-      if (selectedChain !== "All" && column.parsed.chain !== selectedChain) return false;
-      if (selectedFrequency !== "All" && String(column.parsed.frequency) !== selectedFrequency) return false;
-      if (!normalizedQuery) return true;
-      return (
-        column.indicator.name.toLowerCase().includes(normalizedQuery) ||
-        column.parsed.displayName.toLowerCase().includes(normalizedQuery) ||
-        compactTitle(column).toLowerCase().includes(normalizedQuery)
-      );
+      const band = getRfHeatmapBandLabel(column.parsed.frequency, column.parsed.protocol);
+      if (selectedDevices.length > 0 && !selectedDevices.includes(column.parsed.protocol)) return false;
+      if (selectedBands.length > 0 && !selectedBands.includes(band)) return false;
+      if (selectedFrequencies.length > 0 && (column.parsed.frequency === null || !selectedFrequencies.includes(column.parsed.frequency))) return false;
+      if (selectedBandwidths.length > 0 && !selectedBandwidths.includes(column.parsed.bandwidth)) return false;
+      if (selectedRates.length > 0 && !selectedRates.includes(column.parsed.rate)) return false;
+      if (selectedChannels.length > 0 && !selectedChannels.includes(column.parsed.chain)) return false;
+      return true;
     });
 
-    if (sortByWorstCpk) {
+    if (filters.sortByWorstCpk) {
       return [...filtered].sort((a, b) => {
         const cpkA = a.indicator.cpk !== null && a.indicator.cpk !== undefined && !Number.isNaN(a.indicator.cpk) ? a.indicator.cpk : 999;
         const cpkB = b.indicator.cpk !== null && b.indicator.cpk !== undefined && !Number.isNaN(b.indicator.cpk) ? b.indicator.cpk : 999;
@@ -492,7 +380,12 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
       });
     }
     return filtered;
-  }, [matrix.columns, selectedBand, selectedType, selectedModulation, selectedChain, selectedFrequency, query, sortByWorstCpk]);
+  }, [matrix.columns, filters.sortByWorstCpk, selectedDevices, selectedBands, selectedFrequencies, selectedBandwidths, selectedRates, selectedChannels]);
+  const bandColumnCount = matrix.columns.filter(
+    (column) =>
+      (selectedDevices.length === 0 || selectedDevices.includes(column.parsed.protocol)) &&
+      (selectedBands.length === 0 || selectedBands.includes(getRfHeatmapBandLabel(column.parsed.frequency, column.parsed.protocol)))
+  ).length;
 
   const visibleRows = useMemo(() => {
     return matrix.rows
@@ -551,68 +444,11 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded border border-slate-700 bg-slate-950 p-0.5">
-              {["All", ...matrix.bands].map((band) => (
-                <button
-                  key={band}
-                  type="button"
-                  onClick={() => setSelectedBand(band)}
-                  className={`h-8 px-3 text-xs font-bold transition-colors ${
-                    selectedBand === band
-                      ? "bg-cyan-500 text-slate-950"
-                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                  }`}
-                >
-                  {band}
-                </button>
-              ))}
-            </div>
-
-            <SelectControl label="Type" value={selectedType} options={["All", ...matrix.types]} onChange={setSelectedType} />
-            <SelectControl label="Mod" value={selectedModulation} options={["All", ...matrix.modulations]} onChange={setSelectedModulation} />
-            <SelectControl label="CHA" value={selectedChain} options={["All", ...matrix.chains]} onChange={setSelectedChain} />
-            <SelectControl
-              label="Freq"
-              value={selectedFrequency}
-              options={["All", ...matrix.frequencies.map(String)]}
-              onChange={setSelectedFrequency}
-            />
-
-            <button
-              type="button"
-              onClick={() => setShowValues(!showValues)}
-              className={`flex h-9 items-center justify-center rounded-2xl border px-3 text-xs font-bold transition-colors ${
-                showValues
-                  ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                  : "border-slate-700 bg-slate-950/60 text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {locale === "zh" ? "显示数值" : "Show Values"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSortByWorstCpk(!sortByWorstCpk)}
-              className={`flex h-9 items-center justify-center rounded-2xl border px-3 text-xs font-bold transition-colors ${
-                sortByWorstCpk
-                  ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                  : "border-slate-700 bg-slate-950/60 text-slate-400 hover:text-slate-200"
-              }`}
-              title={locale === "zh" ? "按最差 Cpk 排序测试列" : "Sort columns by worst Cpk first"}
-            >
-              {locale === "zh" ? "最差 Cpk 优先" : "Worst Cpk First"}
-            </button>
-
-            <label className="flex h-9 w-64 items-center gap-2 rounded border border-slate-700 bg-slate-950 px-3 text-slate-500">
-              <Search className="h-4 w-4" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter test items"
-                className="min-w-0 flex-1 bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-600"
-              />
-            </label>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <span>{locale === "zh" ? "当前过滤" : "Filtered"}</span>
+            <span className="rounded border border-slate-700 bg-slate-950 px-2 py-1 font-mono text-slate-300">
+              {visibleColumns.length}/{bandColumnCount}
+            </span>
           </div>
         </div>
 
@@ -661,7 +497,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                   <th
                     key={column.indicator.name}
                     className={`h-12 border-r border-slate-800 bg-slate-900 p-0 text-slate-300 ${
-                      showValues ? "w-16 min-w-16" : "w-7 min-w-7"
+                      filters.showValues ? "w-16 min-w-16" : "w-7 min-w-7"
                     }`}
                     title={`${fullTitle(column)}\n${column.indicator.name}`}
                   >
@@ -670,7 +506,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                       onClick={() => onSelectCell(column.parsed.frequency, `${column.parsed.protocol}_${column.parsed.testType}`)}
                       className="flex h-full w-full items-center justify-center hover:bg-slate-800 hover:text-cyan-400 transition-colors"
                     >
-                      <MoreHorizontal className={`text-slate-600/60 hover:text-cyan-400 transition-colors ${showValues ? "h-4 w-4" : "h-3 w-3"}`} />
+                      <MoreHorizontal className={`text-slate-600/60 hover:text-cyan-400 transition-colors ${filters.showValues ? "h-4 w-4" : "h-3 w-3"}`} />
                     </button>
                   </th>
                 ))}
@@ -694,7 +530,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                     
                     const isCpkRow = sRow.isCpk;
                     const cpkClass = isCpkRow ? getCpkCellClass(val) : "text-slate-300";
-                    const cellWidthClass = showValues ? "w-16 min-w-16" : "w-7 min-w-7";
+                    const cellWidthClass = filters.showValues ? "w-16 min-w-16" : "w-7 min-w-7";
 
                     return (
                       <td
@@ -702,7 +538,7 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                         className={`border-r border-b border-slate-800 text-center font-mono py-0.5 px-0.5 truncate ${cellWidthClass} ${cpkClass}`}
                         title={`${fullTitle(column)}\n${sRow.label}: ${formatted}`}
                       >
-                        {showValues ? formatted : ""}
+                        {filters.showValues ? formatted : ""}
                       </td>
                     );
                   })}
@@ -738,8 +574,8 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                     {displayColumns.map((column) => {
                       const cell = getCellTone(column.indicator.values[row.rowIdx] ?? null, column);
                       const isSelected = selectedCell?.rowIdx === row.rowIdx && selectedCell.indicatorName === column.indicator.name;
-                      const cellWidthClass = showValues ? "w-16 min-w-16" : "w-7 min-w-7";
-                      const cellHeightClass = showValues ? "h-8" : "h-6";
+                      const cellWidthClass = filters.showValues ? "w-16 min-w-16" : "w-7 min-w-7";
+                      const cellHeightClass = filters.showValues ? "h-8" : "h-6";
                       return (
                         <td
                           key={`${row.rowIdx}-${column.indicator.name}`}
@@ -749,10 +585,10 @@ const RfHeatmap: React.FC<RfHeatmapProps> = ({
                           <button
                             type="button"
                             onClick={() => setSelectedCell({ rowIdx: row.rowIdx, indicatorName: column.indicator.name })}
-                            className={`block w-full text-center transition-all ${cellHeightClass} ${showValues ? "px-1 py-1 text-[10px]" : "p-0 text-[0px]"}`}
+                            className={`block w-full text-center transition-all ${cellHeightClass} ${filters.showValues ? "px-1 py-1 text-[10px]" : "p-0 text-[0px]"}`}
                             style={{ backgroundColor: cell.color, color: cell.textColor }}
                           >
-                            {showValues ? cell.label : ""}
+                            {filters.showValues ? cell.label : ""}
                           </button>
                         </td>
                       );

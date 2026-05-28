@@ -29,6 +29,7 @@ import {
 import { Supplier } from "../types";
 import { DEFAULT_RF_MAPPINGS, RfMappingConfig } from "../utils/rfParser";
 import { useTheme, Theme } from "../theme";
+import { HistogramBinPrecision } from "../utils/spc";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -37,6 +38,8 @@ interface SettingsModalProps {
   onChangeTheme: (theme: string) => void;
   lineWidth: number;
   onChangeLineWidth: (width: number) => void;
+  binPrecision: HistogramBinPrecision;
+  onChangeBinPrecision: (precision: HistogramBinPrecision) => void;
   rfMappings: RfMappingConfig;
   onChangeRfMappings: (mappings: RfMappingConfig) => void;
   onResetRfMappings: () => void;
@@ -61,6 +64,12 @@ const PROVIDERS: { label: string; value: ModelProvider; i18nKey: "ollama" | "ope
   { label: "Ollama", value: "ollama", i18nKey: "ollama" },
   { label: "OpenAI", value: "openai", i18nKey: "openai" },
   { label: "Custom", value: "custom", i18nKey: "custom" },
+];
+
+const BIN_PRECISION_OPTIONS: { value: HistogramBinPrecision; labelKey: "binPrecisionCoarse" | "binPrecisionStandard" | "binPrecisionFine" }[] = [
+  { value: "coarse", labelKey: "binPrecisionCoarse" },
+  { value: "standard", labelKey: "binPrecisionStandard" },
+  { value: "fine", labelKey: "binPrecisionFine" },
 ];
 
 interface SelectOption {
@@ -138,6 +147,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onChangeTheme,
   lineWidth,
   onChangeLineWidth,
+  binPrecision,
+  onChangeBinPrecision,
   rfMappings,
   onChangeRfMappings,
   onResetRfMappings,
@@ -537,6 +548,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Section 2: Histogram Bin Precision */}
+              <div className="space-y-3 border-t border-slate-800 pt-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-sm font-bold text-slate-300">
+                    <Sliders className="w-4 h-4 text-cyan-400" />
+                    <span>{t("binPrecisionTitle", locale)}</span>
+                  </div>
+                  <span className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded text-blue-400 font-bold border border-slate-700">
+                    {t(BIN_PRECISION_OPTIONS.find((option) => option.value === binPrecision)?.labelKey || "binPrecisionFine", locale)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  {BIN_PRECISION_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => onChangeBinPrecision(option.value)}
+                      className={`flex items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                        binPrecision === option.value
+                          ? "border-blue-500 bg-blue-600/20 text-blue-300 shadow-lg shadow-blue-500/10 scale-105"
+                          : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                      }`}
+                    >
+                      <span>{t(option.labelKey, locale)}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  {t("binPrecisionDesc", locale)}
+                </p>
+              </div>
+
               {/* Section 2: Normal Curve Line Width */}
               <div className="space-y-3 border-t border-slate-800 pt-5">
                 <div className="flex items-center justify-between">
@@ -574,7 +617,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p>
                   {t("spcEngineDesc1", locale)}
                   <code className="bg-slate-800 px-1.5 py-0.5 rounded ml-1 font-mono text-slate-300">
-                    K = ⌈1 + 3.322 log₁₀ N⌉
+                    K = clamp(min, max, ⌈√N × factor⌉)
                   </code>
                 </p>
                 <p>{t("spcEngineDesc2", locale)}</p>

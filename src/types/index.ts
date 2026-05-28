@@ -28,3 +28,8 @@ export interface Supplier {
 }
 
 export type CpkStatus = "red" | "yellow" | "green" | "cyan";
+
+export interface RfHeatmapFilters {
+  showValues: boolean;
+  sortByWorstCpk: boolean;
+}

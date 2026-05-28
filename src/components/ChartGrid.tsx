@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { IndicatorSummary } from "../types";
 import { FileSpreadsheet, BarChart2, AlertTriangle, Info, Copy, Check, BookOpen, X, Bot, Loader2 } from "lucide-react";
 import CpkChart from "./CpkChart";
-import { calculateSpc } from "../utils/spc";
+import { calculateSpc, HistogramBinPrecision } from "../utils/spc";
 import { t, useLocale } from "../i18n";
 import { parseRFIndicator, RfMappingConfig } from "../utils/rfParser";
 import { CpkLevelTag } from "./CpkLevelTag";
@@ -17,6 +17,7 @@ interface ChartGridProps {
   onSelectIndicator: (idx: number) => void;
   chartTheme?: string;
   lineWidth?: number;
+  binPrecision?: HistogramBinPrecision;
   rfMappings: RfMappingConfig;
   isAiEnabled: boolean;
 }
@@ -29,6 +30,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
   onSelectIndicator,
   chartTheme,
   lineWidth,
+  binPrecision,
   rfMappings,
   isAiEnabled,
 }) => {
@@ -160,7 +162,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
       {activeDiagIdx !== null && (() => {
         const ind = indicators[activeDiagIdx];
         if (!ind) return null;
-        const spcRes = calculateSpc(ind, pcbasnList, locale);
+        const spcRes = calculateSpc(ind, pcbasnList, locale, { binPrecision });
         const { cp, cpk, sigmaLevel, status, statusColor } = spcRes;
 
         // 计算规格中心与均值偏移率
@@ -418,7 +420,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
 
       {visibleList.map(({ ind, idx }) => {
         // 调用底层的六西格玛诊断数据
-        const spcRes = calculateSpc(ind, pcbasnList, locale);
+        const spcRes = calculateSpc(ind, pcbasnList, locale, { binPrecision });
         const { cp, cpk, sigmaLevel, status, statusColor, actionTrigger, cpAlert } = spcRes;
         const isSelected = selectedIndicatorIdx === idx;
 
@@ -501,6 +503,7 @@ const ChartGrid: React.FC<ChartGridProps> = ({
                 selectedAsn={null}
                 chartTheme={chartTheme}
                 lineWidth={lineWidth}
+                binPrecision={binPrecision}
               />
               {isSelected && (
                 <div className="absolute top-2 right-2 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] text-amber-300 font-mono animate-pulse pointer-events-none">

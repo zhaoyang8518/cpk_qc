@@ -106,22 +106,21 @@ export function parseRFIndicator(rawName: string, config: RfMappingConfig): Pars
   let bandwidth = "";
   let modulation = "";
 
-  // TPWR item names encode modulation and channel after frequency:
+  // TPWR item names encode MHz unit, optional H/V bandwidth, modulation, and channel:
   // TPWR5180M000006M01 -> M6, CHA1
-  // TPWR6185MH160M1102 -> H160, M11, CHA2
-  // TPWR2437MV20MCS801 -> V20, MCS8, CHA1
-  const tpwrHMatch = baseName.match(/TPWR(\d+)MH(\d+)(MCS|MS|M)(\d+?)(?:M)?(\d{2})$/i);
-  const tpwrVMatch = baseName.match(/TPWR(\d+)MV(\d+)(MCS|MS|M)(\d+?)(?:M)?(\d{2})$/i);
-  const tpwrNoBandwidthMatch = baseName.match(/TPWR(\d+)(MCS|MS|M)(\d+?)(?:M)?(\d{2})$/i);
-  const tpwrMatch = tpwrHMatch || tpwrVMatch || tpwrNoBandwidthMatch;
+  // TPWR6185MH20M1102 -> 6185MHz, H20, M11, CHA2
+  // TPWR2437MV20MCS801 -> 2437MHz, V20, MCS8, CHA1
+  const tpwrBandwidthMatch = baseName.match(/TPWR(\d+)M([HV])(\d+)(MCS|MS|M)(\d+?)(?:M)?(\d{2})$/i);
+  const tpwrNoBandwidthMatch = baseName.match(/TPWR(\d+)M?(MCS|MS|M)(\d+?)(?:M)?(\d{2})$/i);
+  const tpwrMatch = tpwrBandwidthMatch || tpwrNoBandwidthMatch;
   if (tpwrMatch) {
-    const hasBandwidth = Boolean(tpwrHMatch || tpwrVMatch);
+    const hasBandwidth = Boolean(tpwrBandwidthMatch);
     frequency = parseInt(tpwrMatch[1]);
-    bandwidth = hasBandwidth ? `${tpwrHMatch ? "H" : "V"}${parseInt(tpwrMatch[2])}` : "";
-    const modulationType = tpwrMatch[hasBandwidth ? 3 : 2].toUpperCase();
-    const modulationValue = parseInt(tpwrMatch[hasBandwidth ? 4 : 3]);
+    bandwidth = hasBandwidth ? `${tpwrMatch[2].toUpperCase()}${parseInt(tpwrMatch[3])}` : "";
+    const modulationType = tpwrMatch[hasBandwidth ? 4 : 2].toUpperCase();
+    const modulationValue = parseInt(tpwrMatch[hasBandwidth ? 5 : 3]);
     modulation = `${modulationType}${modulationValue}`;
-    const chainNumber = parseInt(tpwrMatch[hasBandwidth ? 5 : 4]);
+    const chainNumber = parseInt(tpwrMatch[hasBandwidth ? 6 : 4]);
     const readableType = testType === "OTHER" ? "TX Power" : undefined;
     const typeLabelMap: Record<string, string> = {
       PWR: "TX Power",
